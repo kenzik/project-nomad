@@ -267,8 +267,15 @@ Watch: `python3 dlstatus.py` (scratchpad; reads `GET /api/downloads/jobs` on 10.
 IPv4 address, `nomad.local` resolves to a link-local IPv6 first for Python) or the Downloads page.
 Do not reboot into the rescue OS while the queue is draining; the queue lives in the shared Redis
 volume and the partial files are resumable, but there is no reason to test that now.
-Kolibri (`:8310`): still at `/en/setup/` (no facility). Agreed: the user completes the wizard and
-hands over the superuser credentials + a channel list; Claude imports via Kolibri's API.
+Kolibri (`:8310`): wizard done by the user 2026-09-23 18:54 ("Home Facility for dkenzik",
+facility `50cbc6cb…`, superuser `dkenzik`, "on my own" setup). All 43 English public Studio
+channels (328 GB) queued 2026-09-23 19:0x as `kolibri.core.content.tasks.remoteimport` tasks via
+`POST /api/tasks/tasks/` (session login `POST /api/auth/session/` with `{username,password,
+facility}`, then `X-CSRFToken` from the `kolibri_csrftoken` cookie); Kolibri runs 4 imports at a
+time. Watch: Device → Channels in the UI, or `GET /api/tasks/tasks/` with the session cookie.
+The user used a temporary superuser password for this; change it in Kolibri afterwards. Channel
+list with ids/sizes: scratchpad `kolibri-en-channels.json` (regenerate from
+`https://studio.learningequality.org/api/public/v1/channels?lang=en`, filter `language == en`).
 After everything lands: re-run `save-images.sh` is NOT needed (content only), but check
 `installed-services.txt` unchanged and `df -h /mnt/nomad`.
 
