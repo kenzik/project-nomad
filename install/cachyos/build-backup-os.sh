@@ -233,6 +233,13 @@ desktop_setup() {
   echo /usr/bin/Hyprland > "$T/etc/greetd/environments"
   arch-chroot "$T" env NOCTALIA_GREETER_SESSION_BIN=/usr/bin/noctalia-greeter-session \
     bash /usr/share/noctalia-greeter/setup_greeter_system.sh || warn "noctalia-greeter system setup failed; check /etc/pam.d/greetd and /var/lib/noctalia-greeter"
+  # Create/unlock the GNOME keyring with the login password at the greeter. greetd's PAM stack
+  # lacks this (SDDM's has it), so the first secret request would pop "Choose password for new
+  # keyring". auth after the password is known, session before pam_systemd, as in pam.d/login.
+  grep -q pam_gnome_keyring "$T/etc/pam.d/greetd" || sed -i \
+    -e '/^auth[[:space:]]\+include[[:space:]]\+system-local-login/a auth       optional     pam_gnome_keyring.so' \
+    -e '/^session[[:space:]]\+include[[:space:]]\+system-local-login/a session    optional     pam_gnome_keyring.so auto_start' \
+    "$T/etc/pam.d/greetd"
   arch-chroot "$T" systemctl disable sddm.service 2>/dev/null || true   # builds before the Hyprland edition
   arch-chroot "$T" systemctl enable greetd.service bluetooth.service
 
