@@ -161,7 +161,15 @@ layers`, generate OK. Both OSes now run the model on the 890M. The drive's toolk
 datastore has been empty since creation (`total blobs: 0`); "Remote Connected" confirms
 `host.docker.internal:11434` works on the rescue OS too.
 
-### 4c. Desktop parity for the rescue OS (applied 2026-09-23 17:20; visual check by the user pending)
+### 4c. Desktop parity for the rescue OS — DONE (user-confirmed 2026-09-23 18:20 on 6.18.50-lts)
+Second `--refresh` (after `91dd56d`/`16519a5`) completed the greeter system setup, LTS-first Limine,
+and PAM keyring: login without the keyring dialog (`login.keyring` created), desktop matches the
+primary with the Nord palette, logout → greeter visible → login again. That refresh also re-ran
+`bootstrap-host.sh --chroot`, so the rescue OS's units are the toolkit's (hygiene item closed).
+Leftover from the debugging session to clean up when convenient: `[output] scale = 2` may still be
+appended to `/var/lib/noctalia-greeter/greeter.toml` on the rescue OS (added as a test; harmless on
+the Dell, wrong for other displays) — `sudo tail -3 /var/lib/noctalia-greeter/greeter.toml` and
+delete those lines if present.
 Applied with `--refresh` (commits `8cecde6`…`91dd56d`); verified over SSH after reboot: greetd runs
 `noctalia-greeter` (sddm disabled), all Hyprland `config/*.lua` present, Noctalia `builtin = "Nord"`
 in config and state, black wallpaper, 84 JuliaMono faces (carried from the AUR package), shell zsh,
@@ -210,9 +218,8 @@ greetd PAM; the rescue OS has the PAM lines (script) — after the first PAM log
 own a `login.keyring`; check `~/.local/share/keyrings/` there.
 
 ### 5. Remaining verification (from the plan)
-- Rescue OS hygiene: re-run `sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh
-  --autostart --expose=lan --gpu=vulkan,cuda,rocm --yes` there so its hand-installed
-  `nomad-ollama.service` comes from the toolkit (same content; no behaviour change).
+- Both OSes now default to the LTS kernel (primary 6.18.52, rescue 6.18.50); logout → greeter
+  verified on both. When a newer 7.2.x lands, test logout on it before switching `BOOT_ORDER` back.
 - Offline start on the primary: `nmcli networking off; sudo nomad-down; sudo nomad-up` with no pull.
 - Exposure: `:8080` reachable from a LAN device; `sudo nomad-expose local` blocks it (confirms the
   DOCKER-USER rule under iptables-nft); `curl <ip>:11434` from the LAN refused.
