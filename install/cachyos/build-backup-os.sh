@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build the generic backup CachyOS on the NOMAD drive's NOMAD_ROOT / NOMAD_ESP partitions.
 # Run from the primary OS. The result boots on any x86-64 PC (UEFI removable path and legacy
-# BIOS) when the drive is moved to a USB enclosure, and is itself a bootstrapped NOMAD host.
+# BIOS) when the drive is moved to a USB enclosure, is itself a bootstrapped NOMAD host, and is
+# reachable over SSH from first boot (the primary user's authorized_keys are carried over).
 #
 # DESTRUCTIVE to NOMAD_ROOT and NOMAD_ESP only. Targets are resolved by partition label, must sit
 # on the same disk as NOMAD_DATA, must not be the running system's disk, and you confirm the
@@ -85,7 +86,7 @@ Include = /etc/pacman.d/mirrorlist
 EOF
 
 gpu=vulkan
-pkgs=(base linux-firmware amd-ucode intel-ucode mkinitcpio sudo nano networkmanager ufw
+pkgs=(base linux-firmware amd-ucode intel-ucode mkinitcpio sudo nano networkmanager ufw openssh
   zram-generator e2fsprogs dosfstools btrfs-progs gptfdisk arch-install-scripts rsync git curl
   zstd usbutils pciutils nvme-cli smartmontools archlinux-keyring cachyos-keyring
   cachyos-mirrorlist mesa vulkan-icd-loader vulkan-radeon vulkan-intel intel-media-driver
@@ -156,8 +157,22 @@ echo "Set a password for '$user' on the backup OS:"
 arch-chroot "$T" passwd "$user"
 arch-chroot "$T" passwd -l root >/dev/null
 
+# Same SSH keys as this host's user, so the backup OS is reachable without a console.
+src_home=$(getent passwd "$user" | cut -d: -f6 || true)
+if [[ -n $src_home && -s $src_home/.ssh/authorized_keys ]]; then
+  install -d -m700 "$T/home/$user/.ssh"
+  install -m600 "$src_home/.ssh/authorized_keys" "$T/home/$user/.ssh/authorized_keys"
+  arch-chroot "$T" chown -R "$user:$user" "/home/$user/.ssh"
+  info "Copied $src_home/.ssh/authorized_keys for '$user'"
+fi
+
+# ufw programs live chains only when ufw.conf says ENABLED=yes. With the package default (no) the
+# rule is just written to user.rules, which is what we want: inside the chroot, "live" would mean
+# THIS host's firewall. So add rules first, then enable.
+grep -q '^ENABLED=no' "$T/etc/ufw/ufw.conf" || die "$T/etc/ufw/ufw.conf is not ENABLED=no; refusing to run ufw in the chroot"
+arch-chroot "$T" ufw allow 22/tcp comment 'sshd' >/dev/null
 sed -i 's/^ENABLED=no/ENABLED=yes/' "$T/etc/ufw/ufw.conf"
-arch-chroot "$T" systemctl enable NetworkManager.service ufw.service systemd-timesyncd.service fstrim.timer
+arch-chroot "$T" systemctl enable NetworkManager.service ufw.service sshd.service systemd-timesyncd.service fstrim.timer
 [[ $desktop == yes ]] && arch-chroot "$T" systemctl enable sddm.service
 
 info "NOMAD host bootstrap inside the backup OS"
@@ -171,6 +186,7 @@ fail=0
 [[ -f $T/boot/limine-bios.sys ]] || { warn "limine-bios.sys missing on the ESP"; fail=1; }
 grep -q "$root_uuid" "$T/boot/limine.conf" 2>/dev/null || { warn "limine.conf has no entry for root UUID $root_uuid"; fail=1; }
 find "$T/boot" -name 'initramfs*' | grep -q . || { warn "No initramfs found on the ESP"; fail=1; }
+grep -q -- '--dport 22 ' "$T/etc/ufw/user.rules" || { warn "ufw has no rule for port 22; sshd would be unreachable"; fail=1; }
 nongeneric=$(arch-chroot "$T" pacman -Qi | awk '/^Name/{n=$3} /^Architecture/{if($3!="x86_64"&&$3!="any")print n,$3}')
 [[ -z $nongeneric ]] || { warn "Non-generic packages installed:"; echo "$nongeneric"; fail=1; }
 

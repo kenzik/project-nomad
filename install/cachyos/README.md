@@ -97,8 +97,13 @@ initramfs built without `autodetect`, Limine on the removable EFI path plus lega
 boot entry. It asks for the last 4 characters of the disk serial before formatting. Flags:
 `--hostname`, `--no-desktop`, `--no-nvidia`, `--no-rocm`.
 
-Test it: reboot, open the firmware boot menu, choose the datastore drive. NOMAD should come up with
-all content. Update it occasionally from inside (`sudo pacman -Syu`).
+`sshd` is enabled with port 22 open in ufw, and `<login>`'s `~/.ssh/authorized_keys` from this host
+is copied over. The backup OS has its own host key and hostname (`nomad-rescue`), so if it takes the
+same DHCP lease as the primary, use a separate `Host` alias with its own `UserKnownHostsFile`.
+
+Test it: reboot, open the firmware boot menu, choose the datastore drive (or, from the primary,
+`sudo efibootmgr --bootnext <the "UEFI OS" entry on NOMAD_ESP> && sudo reboot`). NOMAD should come
+up with all content. Update it occasionally from inside (`sudo pacman -Syu`).
 
 ## Operating
 

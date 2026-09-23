@@ -23,6 +23,9 @@ Environment=OLLAMA_HOST=0.0.0.0:11434
 Environment=OLLAMA_NO_CLOUD=1
 Environment=OLLAMA_FLASH_ATTENTION=1
 Environment=OLLAMA_VULKAN=1
+# Ollama >= 0.34 skips integrated GPUs by default ("dropping integrated GPU") and runs on the CPU.
+# This host's GPU *is* an iGPU (Radeon 890M, up to 64 GB shared), so opt back in.
+Environment=OLLAMA_IGPU_ENABLE=1
 Restart=on-failure
 RestartSec=3
 RestartPreventExitStatus=1

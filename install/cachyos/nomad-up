@@ -34,7 +34,9 @@ done
 
 info "NOMAD is up: $NOMAD_ADMIN_URL"
 if [[ $(. "$NOMAD_HOST_CONF" 2>/dev/null; echo "${EXPOSE:-lan}") == lan ]]; then
-  for ip in $(hostname -i 2>/dev/null); do
-    [[ $ip == 127.* || $ip == *:* ]] || info "LAN: http://$ip:8080"
+  # `ip`, not `hostname -i`: inetutils is not in a base install (the backup OS has no hostname binary).
+  for ip in $(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1); do
+    [[ $ip == 172.1[6-9].* || $ip == 172.2[0-9].* || $ip == 172.3[01].* ]] && continue   # docker bridges
+    info "LAN: http://$ip:8080"
   done
 fi
