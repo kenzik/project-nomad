@@ -172,6 +172,14 @@ install_files() {
   else
     ln -sfn "$NOMAD_DIR" /opt/project-nomad
   fi
+
+  # Keep the drive's own copy of the toolkit current, unless this run *is* that copy.
+  local tk=$NOMAD_HB/toolkit
+  if [[ $chroot == no && -d $NOMAD_HB && $(readlink -f "$here") != $(readlink -f "$tk" 2>/dev/null) ]]; then
+    install -d "$tk"
+    cp -a "$here/." "$tk/"
+    (cd "$tk" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+  fi
 }
 
 setup_firewall() {

@@ -1,8 +1,11 @@
 #!/bin/bash
-# Start Project NOMAD (mounts the datastore if needed, via the unit's BindsTo).
+# Start Project NOMAD (mounts the datastore if needed, via the unit's BindsTo) and wait for the
+# admin to answer.
 set -uo pipefail
 . /usr/local/lib/nomad/common.sh
 need_root "$@"
+
+READY_TIMEOUT=${READY_TIMEOUT:-1800}
 
 # A mount whose device vanished (surprise unplug) blocks a fresh mount; clear it.
 if mountpoint -q "$NOMAD_MNT"; then
@@ -17,6 +20,17 @@ systemctl start project-nomad.service || {
   systemctl --no-pager --lines=20 status project-nomad.service
   die "project-nomad.service failed to start"
 }
+
+info "Waiting for the admin at $NOMAD_ADMIN_URL (first start on a host may load the image archive)"
+deadline=$((SECONDS + READY_TIMEOUT))
+until curl -fsS -o /dev/null "$NOMAD_ADMIN_URL/api/health"; do
+  if ! systemctl is-active --quiet project-nomad.service; then
+    journalctl --no-pager -n 30 -u project-nomad.service
+    die "project-nomad.service failed; see the log above"
+  fi
+  ((SECONDS < deadline)) || die "Admin not healthy after ${READY_TIMEOUT}s; check: journalctl -u project-nomad -f"
+  sleep 5
+done
 
 info "NOMAD is up: $NOMAD_ADMIN_URL"
 if [[ $(. "$NOMAD_HOST_CONF" 2>/dev/null; echo "${EXPOSE:-lan}") == lan ]]; then

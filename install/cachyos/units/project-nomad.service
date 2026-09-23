@@ -1,4 +1,7 @@
 # Project N.O.M.A.D. lifecycle, bound to the datastore mount.
+# Type=exec rather than oneshot: a oneshot wanted by multi-user.target holds the login screen
+# until NOMAD is healthy (60 s on a warm host, many minutes on a first boot that loads the image
+# archive). The start script runs in the background; `nomad-up` waits for readiness.
 # Never use `docker compose down` here: app containers created by the admin share the
 # project-nomad_default network and would block or be orphaned by it.
 [Unit]
@@ -10,15 +13,10 @@ BindsTo=mnt-nomad.mount
 AssertPathExists=/mnt/nomad/project-nomad/compose.yml
 
 [Service]
-Type=oneshot
+Type=exec
 RemainAfterExit=yes
-# A first start on a new host may load a multi-GB image archive.
-TimeoutStartSec=30min
 TimeoutStopSec=5min
-ExecStartPre=/usr/local/lib/nomad/nomad-preflight
-ExecStart=/usr/bin/docker compose -p project-nomad -f /mnt/nomad/project-nomad/compose.yml up -d
-ExecStart=-/usr/local/lib/nomad/nomad-start-children
-ExecStartPost=-/usr/local/lib/nomad/nomad-adopt-host
+ExecStart=/usr/local/lib/nomad/nomad-start
 # ExecStopPost also runs when start fails, and its script lives on the host, so containers are
 # stopped even if the drive has vanished.
 ExecStopPost=/usr/local/lib/nomad/nomad-stop-containers

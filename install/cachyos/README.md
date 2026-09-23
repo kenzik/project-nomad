@@ -113,6 +113,18 @@ Do not use `docker compose down` on the NOMAD project: app containers created by
 network. Do not run upstream's `install_nomad.sh` or `update_nomad.sh`; update from the NOMAD UI, then
 re-run `save-images.sh`.
 
+At boot, `project-nomad.service` starts NOMAD in the background; the login screen does not wait for
+it. The admin is typically reachable a minute after boot (`journalctl -u project-nomad -f` to watch).
+
+### Updating the toolkit
+```
+git pull
+sudo bash bootstrap-host.sh <same flags as before>   # see /etc/nomad-host.conf
+```
+It reinstalls the units and scripts and refreshes the copy on the drive. The backup OS carries its
+own copy; update it from there the same way (its checkout is `/opt/nomad-toolkit`, or use the drive's
+`host-bootstrap/toolkit`).
+
 ### Exposure
 NOMAD's admin API has no authentication and the admin container holds the Docker socket: anyone who
 can reach port 8080 can gain root on the host. Docker-published ports bypass ufw. `lan` is for
@@ -138,7 +150,8 @@ sudo nomad-up
 ## How moving between hosts works
 Containers and images live in each host's Docker, not on the drive. When an app's container is missing,
 the admin marks it "not installed" (`admin/app/services/system_service.ts`, `_syncContainersWithDatabase`).
-`nomad-stop-containers` records installed apps in `installed-services.txt` on every clean stop, and
+`nomad-stop-containers` records installed apps in `installed-services.txt` on every clean stop
+(`save-images.sh` writes it too), and
 `nomad-adopt-host` reinstalls them through `POST /api/system/services/install` on a host that lacks them.
 Bind-mounted data is reused. `nomad_ollama` is never adopted; native Ollama owns port 11434.
 

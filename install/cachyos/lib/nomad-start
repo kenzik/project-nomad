@@ -1,0 +1,13 @@
+#!/bin/bash
+# ExecStart for project-nomad.service. One long-running process instead of oneshot ExecStart
+# lines, so multi-user.target (and the login screen) does not wait for NOMAD to become healthy.
+# Preflight and compose failures are fatal (unit -> failed, ExecStopPost stops containers);
+# child start and adoption are best-effort.
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+"$NOMAD_LIB/nomad-preflight" || exit 1
+docker compose -p "$NOMAD_PROJECT" -f "$NOMAD_COMPOSE" up -d || exit 1
+"$NOMAD_LIB/nomad-start-children" || true
+"$NOMAD_LIB/nomad-adopt-host" || true
+exit 0
