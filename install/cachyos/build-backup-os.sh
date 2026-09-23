@@ -120,7 +120,7 @@ if [[ $desktop == yes ]]; then
     cachyos-fish-config cachyos-micro-settings firefox pavucontrol btop fastfetch xdg-user-dirs
     bluez bluez-utils upower pipewire pipewire-alsa pipewire-pulse wireplumber gst-plugin-pipewire
     noto-fonts-cjk cantarell-fonts ttf-dejavu ttf-liberation ttf-bitstream-vera ttf-opensans
-    ttf-firacode-nerd ttf-meslo-nerd ttf-juliamono-nerd-font ttf-nerd-fonts-symbols-mono)
+    ttf-firacode-nerd ttf-meslo-nerd ttf-nerd-fonts-symbols-mono)
 fi
 stage2=(linux-cachyos linux-cachyos-lts limine limine-mkinitcpio-hook)
 [[ $nvidia == yes ]] && stage2+=(linux-cachyos-nvidia-open linux-cachyos-lts-nvidia-open)
@@ -253,6 +253,18 @@ desktop_setup() {
   else
     warn "No $src_home/.config on this host; the backup OS keeps the packaged desktop defaults"
   fi
+
+  # Fonts from AUR/foreign packages on this host are not in the repos (kitty here wants JuliaMono
+  # Nerd Font); carry the files under /usr/local, outside pacman's tree.
+  local pkg files
+  for pkg in $(pacman -Qmq 2>/dev/null); do
+    files=$(pacman -Qlq "$pkg" | grep -E '\.(ttf|otf)$' || true)
+    [[ -n $files ]] || continue
+    install -d "$T/usr/local/share/fonts/$pkg"
+    while IFS= read -r f; do install -m644 "$f" "$T/usr/local/share/fonts/$pkg/"; done <<<"$files"
+    info "Copied fonts of foreign package $pkg"
+  done
+  arch-chroot "$T" fc-cache -f >/dev/null 2>&1 || true
 
   # Tell the two systems apart at a glance: a different Noctalia palette, which its templates
   # carry into kitty, alacritty, GTK, Qt and btop. Both files hold the scheme (the GUI writes the
