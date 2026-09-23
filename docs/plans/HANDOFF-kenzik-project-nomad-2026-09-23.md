@@ -149,9 +149,12 @@ Rollout: commit → on the primary `git pull` + `bootstrap-host.sh` re-run (inst
 refreshes the drive's toolkit copy) → on the rescue OS re-run bootstrap from the drive copy. For the
 immediate test the unit was installed by hand on the rescue OS (16:2x): Ollama now reports
 `inference compute library=ROCm compute=gfx1150 type=iGPU total="30.2 GiB"`, `default_num_ctx=32768`.
-It picked ROCm over Vulkan (both installed there). Untested until a model exists: whether gfx1150
-loads under the bundled rocBLAS (`rocm_v7_2`) — if not, `HSA_OVERRIDE_GFX_VERSION=11.0.2` in the
-unit or removing `ollama-rocm` on the rescue OS. The primary has only `ollama-vulkan` → Vulkan.
+It picked ROCm over Vulkan (both installed there). Tested with `qwen3:0.6b` (pulled via the API,
+522 MB, on the datastore as ollama:ollama): `offloaded 29/29 layers to GPU`, load 1.6 s, generate
+OK; ROCm gfx1150 works under the bundled `rocm_v7_2`. The primary has only `ollama-vulkan` → Vulkan;
+verify there after the rollout: `journalctl -b -u nomad-ollama | grep "inference compute"` and the
+same generate. Committed as `11e8c7a`; rollout on the primary = `git pull` + bootstrap re-run +
+`sudo systemctl restart nomad-ollama`.
 "No Models Installed" in the AI Assistant is expected until a model is pulled: `blobs/` on the
 datastore has been empty since creation (`total blobs: 0`); "Remote Connected" confirms
 `host.docker.internal:11434` works on the rescue OS too.
@@ -163,7 +166,7 @@ datastore has been empty since creation (`total blobs: 0`); "Remote Connected" c
 - Clean stop: `sudo nomad-down --unmount` then `sudo e2fsck -fn /dev/disk/by-partlabel/NOMAD_DATA`.
 - DONE: `efibootmgr` on the primary shows no "Limine" entry from the chroot build (only the
   firmware's own `Boot0007 UEFI OS` for `NOMAD_ESP`).
-- Model pulled in the UI lands in `/mnt/nomad/ollama/models` (614:614).
+- DONE (via API on the rescue OS): a pulled model lands in `/mnt/nomad/ollama/models` as 614:614.
 
 ### 6. Later
 - Content: ZIM tiers / Wikipedia / maps in the UI; Kolibri channel import at `:8310`.
