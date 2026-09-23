@@ -200,7 +200,11 @@ Same greeter, config, monitor (Dell S2725QS 4K@120 over HDMI). Ruled out: `pam_g
 greeter `sync.toml`, stale greeter sessions, greeter scale relayout (pinning `[output] scale = 2`
 changes the colour, not the result). Workaround: LTS first in `/etc/default/limine`
 `BOOT_ORDER="*lts, *, *fallback…"` + `limine-update` on both OSes; the build script now defaults to
-LTS-first and `--refresh` re-applies it. Revisit when a 7.2.x fix lands (test: log out on 7.2.x).
+LTS-first and `--refresh` re-applies it. On the primary the installer's `limine.conf` header also has
+`remember_last_entry: yes`, which overrides `default_entry: 2` with whatever was picked last;
+`limine-update` preserves the header, so it was set to `no` by hand (2026-09-23 18:0x). Config
+precedence in the CachyOS Limine tooling: `/etc/limine-entry-tool.conf` then `/etc/default/limine`
+(highest). Revisit when a 7.2.x fix lands (test: log out on 7.2.x).
 Keyring: the primary has a user-created `Default_keyring.keyring` and no `pam_gnome_keyring` in its
 greetd PAM; the rescue OS has the PAM lines (script) — after the first PAM login there it should
 own a `login.keyring`; check `~/.local/share/keyrings/` there.
