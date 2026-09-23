@@ -258,8 +258,21 @@ own a `login.keyring`; check `~/.local/share/keyrings/` there.
   firmware's own `Boot0007 UEFI OS` for `NOMAD_ESP`).
 - DONE (via API on the rescue OS): a pulled model lands in `/mnt/nomad/ollama/models` as 614:614.
 
-### 6. Later
-- Content: ZIM tiers / Wikipedia / maps in the UI; Kolibri channel import at `:8310`.
+### 6. Content — IN PROGRESS (started 2026-09-23 18:5x on the primary, via the admin API)
+User's choices: Wikipedia `all-maxi` (124 GB), all six Kiwix categories at `<slug>-comprehensive`
+(tiers include the lower ones via `includesTier`; ~87 GB incl. the FDA drug-label dataset), all nine
+US map collections (~20 GB) after `POST /api/maps/setup-world-basemap` (base assets + ~15 MB
+low-zoom world). 104 jobs were queued (BullMQ: 3 concurrent); `delayed` = retry backoff.
+Watch: `python3 dlstatus.py` (scratchpad; reads `GET /api/downloads/jobs` on 10.0.10.186 — use the
+IPv4 address, `nomad.local` resolves to a link-local IPv6 first for Python) or the Downloads page.
+Do not reboot into the rescue OS while the queue is draining; the queue lives in the shared Redis
+volume and the partial files are resumable, but there is no reason to test that now.
+Kolibri (`:8310`): still at `/en/setup/` (no facility). Agreed: the user completes the wizard and
+hands over the superuser credentials + a channel list; Claude imports via Kolibri's API.
+After everything lands: re-run `save-images.sh` is NOT needed (content only), but check
+`installed-services.txt` unchanged and `df -h /mnt/nomad`.
+
+### 7. Later
 - Re-run `save-images.sh` after any app install/update. Re-run `build-pkgcache.sh` occasionally.
 - Optional iGPU GTT tuning for larger models (unverified): `ttm.pages_limit` / `ttm.page_pool_size`
   in `/etc/default/limine`, small BIOS UMA buffer.
