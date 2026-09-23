@@ -109,7 +109,7 @@ gpu=vulkan
 pkgs=(base linux-firmware amd-ucode intel-ucode mkinitcpio sudo nano networkmanager ufw openssh
   inetutils avahi zram-generator e2fsprogs dosfstools btrfs-progs gptfdisk arch-install-scripts
   rsync git curl zstd usbutils pciutils nvme-cli smartmontools archlinux-keyring cachyos-keyring
-  cachyos-mirrorlist cachyos-settings cachyos-hooks mesa vulkan-icd-loader vulkan-radeon
+  cachyos-mirrorlist cachyos-settings cachyos-hooks lsb-release mesa vulkan-icd-loader vulkan-radeon
   vulkan-intel intel-media-driver docker docker-compose ollama ollama-vulkan)
 if [[ $nvidia == yes ]]; then pkgs+=(nvidia-utils ollama-cuda); gpu+=,cuda; fi
 if [[ $rocm == yes ]]; then pkgs+=(ollama-rocm); gpu+=,rocm; fi
@@ -225,11 +225,14 @@ arch-chroot "$T" systemctl enable NetworkManager.service ufw.service sshd.servic
 arch-chroot "$T" systemctl enable systemd-resolved.service avahi-daemon.service
 
 desktop_setup() {
-  # greetd runs the Noctalia greeter, as the installer sets it up on the primary; the upstream
-  # helper adds pam_systemd to /etc/pam.d/greetd.
+  # greetd runs the Noctalia greeter, as the installer sets it up on the primary. The package's
+  # install hook runs the same setup script (PAM patch, greeter paths, greeter.toml), but inside a
+  # pacstrap/chroot it runs before sysusers has created 'greeter' and skips half of it; run it
+  # again now that the user exists.
   printf '[terminal]\nvt = 1\n\n[default_session]\ncommand = "/usr/bin/noctalia-greeter-session"\nuser = "greeter"\n' > "$T/etc/greetd/config.toml"
   echo /usr/bin/Hyprland > "$T/etc/greetd/environments"
-  arch-chroot "$T" bash /usr/share/noctalia-greeter/setup_greetd_pam.sh || warn "noctalia-greeter PAM setup failed; check /etc/pam.d/greetd"
+  arch-chroot "$T" env NOCTALIA_GREETER_SESSION_BIN=/usr/bin/noctalia-greeter-session \
+    bash /usr/share/noctalia-greeter/setup_greeter_system.sh || warn "noctalia-greeter system setup failed; check /etc/pam.d/greetd and /var/lib/noctalia-greeter"
   arch-chroot "$T" systemctl disable sddm.service 2>/dev/null || true   # builds before the Hyprland edition
   arch-chroot "$T" systemctl enable greetd.service bluetooth.service
 
