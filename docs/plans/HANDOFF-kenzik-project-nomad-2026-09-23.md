@@ -161,7 +161,15 @@ layers`, generate OK. Both OSes now run the model on the 890M. The drive's toolk
 datastore has been empty since creation (`total blobs: 0`); "Remote Connected" confirms
 `host.docker.internal:11434` works on the rescue OS too.
 
-### 4c. Desktop parity for the rescue OS (in progress 2026-09-23 evening)
+### 4c. Desktop parity for the rescue OS (applied 2026-09-23 17:20; visual check by the user pending)
+Applied with `--refresh` (commits `8cecde6`…`91dd56d`); verified over SSH after reboot: greetd runs
+`noctalia-greeter` (sddm disabled), all Hyprland `config/*.lua` present, Noctalia `builtin = "Nord"`
+in config and state, black wallpaper, 84 JuliaMono faces (carried from the AUR package), shell zsh,
+os-release "CachyOS", `/etc/motd`, systemd-resolved stub + mDNS, avahi → `nomad-rescue.local`
+resolves from the daily driver (its `nomad-rescue` alias now uses that name). Boot chain 13 ms,
+NOMAD healthy, model visible. Lessons: `ttf-juliamono-nerd-font` is AUR-only (fonts of `pacman -Qm`
+packages are now copied to `/usr/local/share/fonts/`); `noctalia-greeter`'s install hook runs before
+sysusers creates `greeter` in a chroot, so the script re-runs `setup_greeter_system.sh` afterwards.
 The primary is NOT Plasma: it is the CachyOS Hyprland + Noctalia edition (`cachyos-hypr-noctalia`
 meta, `noctalia-greeter` on greetd with `/etc/greetd/environments` = `/usr/bin/Hyprland`, shell zsh
 with `cachyos-zsh-config` + `~/.p10k.zsh`, Noctalia palette `Ayu` pinned in
@@ -181,6 +189,21 @@ Then boot the rescue OS (`sudo efibootmgr --bootnext 0007 && sudo reboot`) and c
 Noctalia's, Hyprland session with your layout/binds, bar in the Nord palette, black wallpaper,
 `ssh nomad-rescue.local` resolves (then switch the daily driver's alias from the IP to it).
 Not carried over on purpose: `~/.local/bin` (whispr, herdr), Plymouth splash, `cachyos-hello`.
+
+### 4d. Kernel 7.2.x amdgpu regression: blank greeter after logout (found 2026-09-23 evening)
+Symptom: after logging out of Hyprland (or `systemctl restart greetd`), the screen shows a solid
+colour (purple, later green) although greeter and compositor log a normal modeset, first frame and
+even accept the password blind (login works, the session is equally invisible). Kernel messages:
+`amdgpu … REG_WAIT timeout … optc35_disable_crtc` at boot on every kernel (noise), nothing at the
+failure. Isolation: rescue OS 7.2.5 → broken; primary 6.18.52-lts → fine; primary 7.2.6 → broken.
+Same greeter, config, monitor (Dell S2725QS 4K@120 over HDMI). Ruled out: `pam_gnome_keyring` lines,
+greeter `sync.toml`, stale greeter sessions, greeter scale relayout (pinning `[output] scale = 2`
+changes the colour, not the result). Workaround: LTS first in `/etc/default/limine`
+`BOOT_ORDER="*lts, *, *fallback…"` + `limine-update` on both OSes; the build script now defaults to
+LTS-first and `--refresh` re-applies it. Revisit when a 7.2.x fix lands (test: log out on 7.2.x).
+Keyring: the primary has a user-created `Default_keyring.keyring` and no `pam_gnome_keyring` in its
+greetd PAM; the rescue OS has the PAM lines (script) — after the first PAM login there it should
+own a `login.keyring`; check `~/.local/share/keyrings/` there.
 
 ### 5. Remaining verification (from the plan)
 - Rescue OS hygiene: re-run `sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh

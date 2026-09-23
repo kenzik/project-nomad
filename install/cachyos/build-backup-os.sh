@@ -144,7 +144,23 @@ arch-chroot "$T" pacman-key --populate archlinux cachyos || warn "Keyring popula
 if [[ $refresh == no ]]; then
   # Kernels are stored under $ESP/<machine-id>/, so the ID must exist before they install.
   systemd-machine-id-setup --root="$T"
+fi
 
+# SKIP_UEFI: never call efibootmgr (it would write into THIS machine's firmware from the chroot).
+# ENABLE_LIMINE_FALLBACK: install to EFI/BOOT/BOOTX64.EFI, the path firmware uses for removable media.
+# LTS first: the 7.2.x amdgpu regression (Strix/DCN 3.5, 2026-09) leaves the display showing a
+# stale buffer after a compositor handoff (logout → greeter); 6.18 LTS is fine. Also the safer
+# default for a drive that must boot unknown hardware.
+cat > "$T/etc/default/limine" <<EOF
+ESP_PATH="/boot"
+SKIP_UEFI=yes
+ENABLE_LIMINE_FALLBACK=yes
+FIND_BOOTLOADERS=no
+KERNEL_CMDLINE[default]="root=UUID=$root_uuid rw quiet nowatchdog"
+BOOT_ORDER="*lts, *, *fallback"
+EOF
+
+if [[ $refresh == no ]]; then
   # No autodetect: the initramfs carries every storage/USB/GPU driver and both vendors' microcode
   # instead of only what this machine uses. No chwd configs, no forced NVIDIA modules.
   install -d "$T/etc/mkinitcpio.conf.d"
@@ -153,17 +169,6 @@ MODULES=()
 HOOKS=(base systemd microcode kms modconf block keyboard sd-vconsole filesystems)
 EOF
   [[ -f /etc/vconsole.conf ]] && install -m644 /etc/vconsole.conf "$T/etc/vconsole.conf" || echo 'KEYMAP=us' > "$T/etc/vconsole.conf"
-
-  # SKIP_UEFI: never call efibootmgr (it would write into THIS machine's firmware from the chroot).
-  # ENABLE_LIMINE_FALLBACK: install to EFI/BOOT/BOOTX64.EFI, the path firmware uses for removable media.
-  cat > "$T/etc/default/limine" <<EOF
-ESP_PATH="/boot"
-SKIP_UEFI=yes
-ENABLE_LIMINE_FALLBACK=yes
-FIND_BOOTLOADERS=no
-KERNEL_CMDLINE[default]="root=UUID=$root_uuid rw quiet nowatchdog"
-BOOT_ORDER="*, *lts, *fallback"
-EOF
 
   genfstab -U "$T" | grep -vw swap > "$T/etc/fstab"
   ln -sf "$(readlink -f /etc/localtime)" "$T/etc/localtime"
@@ -181,6 +186,8 @@ EOF
 else
   info "Upgrading the backup OS (${#pkgs[@]} + ${#stage2[@]} packages wanted)"
   arch-chroot "$T" pacman -Syu --noconfirm --needed "${pkgs[@]}" "${stage2[@]}"
+  # Re-apply /etc/default/limine (BOOT_ORDER) to limine.conf even when no kernel changed.
+  arch-chroot "$T" limine-update || warn "limine-update failed; check /boot/limine.conf"
 fi
 echo "$host_name" > "$T/etc/hostname"
 
