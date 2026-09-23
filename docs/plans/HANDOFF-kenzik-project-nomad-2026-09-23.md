@@ -5,21 +5,29 @@ current state, what is unverified, and the next steps. Runbook: `install/cachyos
 
 ## Working arrangement
 - Claude Code runs on the daily driver (repo at `~/src/project-nomad`, branch `cachyos-portable`).
-  The X1 Pro is reached by the user over SSH; Claude prepares commands, the user runs anything that
-  needs root or is destructive and pastes output back.
+  `ssh nomad` works passwordless from the daily driver (`ssh -o BatchMode=yes nomad …`), so Claude
+  runs read-only / non-root checks on the X1 Pro directly. `sudo` needs a password: the user runs
+  anything that needs root or is destructive and pastes output back.
 - Fork: `git@github.com:kenzik/project-nomad.git`. Branch `cachyos-portable`, pushed. Commits:
   `34cff24` toolkit + plan, `663c377` background-start fix (see "Open item 1").
 - On the X1 Pro the checkout is `~/project-nomad`; toolkit dir `~/project-nomad/install/cachyos`.
 
 ## Hardware / disk state on the X1 Pro (MINISFORUM X1 Pro-370, 64 GB, Radeon 890M)
-- Primary CachyOS (installer defaults, znver4 repos) on the 512 GB NVMe. ufw active. Limine.
-- Lexar 4 TB = `/dev/nvme0n1`:
+- Primary CachyOS (installer defaults, znver4 repos) on the 1 TB Kingston `OM8TAP41024K1` (4 GiB
+  vfat `/boot` + btrfs root). ufw active. Limine (`Boot0003`).
+- NVMe device names are NOT stable across boots: the Lexar was `nvme0n1` when the backup OS was
+  built and is `nvme1n1` as of the 2026-09-23 evening check. The toolkit resolves everything by
+  PARTLABEL/UUID; always use `/dev/disk/by-partlabel/NOMAD_*` in hand-typed commands.
+- Lexar 4 TB (`Lexar SSD NM790 4TB`, serial ends `P220J`):
   | Part | PARTLABEL | FS | State |
   |---|---|---|---|
-  | p1 1 MiB | `NOMAD_BIOS` | — | Limine BIOS stage (written only if `build-backup-os.sh` finished) |
-  | p2 4 GiB | `NOMAD_ESP` | vfat | formatted by `build-backup-os.sh` (result unconfirmed) |
-  | p3 330 GiB | `NOMAD_ROOT` | ext4? | backup OS target; build result unconfirmed |
+  | p1 1 MiB | `NOMAD_BIOS` | — | Limine BIOS stage written ("installed successfully" in the log) |
+  | p2 4 GiB | `NOMAD_ESP` | vfat `FB19-D43F` | `EFI/BOOT/BOOTX64.EFI`, `limine-bios.sys`, `limine.conf`, kernels+initramfs under `7faf24feb75c4ca288c87ff391f66d46/` |
+  | p3 330 GiB | `NOMAD_ROOT` | ext4 `0244d04a-4457-41bb-80e8-81eeadbfc13e` | backup OS, built OK (see item 4), never booted |
   | p4 3.4 TiB | `NOMAD_DATA` | ext4 | UUID `45d74f7a-ccca-42b7-9507-52218872436c`, mounted `/mnt/nomad` |
+- Firmware entries: `Boot0007 "UEFI OS"` → `HD(2,GPT,4f09ef2c…)` is the firmware's own auto-detected
+  entry for `NOMAD_ESP`'s fallback path (not created by the chroot build). `efibootmgr --bootnext 0007`
+  boots the Lexar once without touching BootOrder.
 - Mirror fix applied: `krfoss.org` entries commented out in `/etc/pacman.d/cachyos-v4-mirrorlist`
   and `cachyos-mirrorlist` (those mirrors serve packages without `.sig` files). A future
   `cachyos-rate-mirrors` run may bring them back.
@@ -35,7 +43,8 @@ The user is not in the `docker` group by default; `sudo docker …` or `usermod 
 `init-nomad-data.sh` ran: `compose.yml` (0600) pinned to `project-nomad:v1.34.1`, binds under
 `/mnt/nomad/project-nomad/{storage,mysql,redis}`, `pull_policy: missing`, bridge `br-nomad`.
 `/mnt/nomad/ollama` owned by ollama. Toolkit copy at `/mnt/nomad/host-bootstrap/toolkit` (refreshed
-on every `bootstrap-host.sh` run since `663c377`).
+on every non-chroot `bootstrap-host.sh` run since `663c377`). As of the last check it is still the
+pre-`663c377` copy (no `lib/nomad-start`, oneshot unit); the item-1 re-run refreshes it.
 
 ## NOMAD state (done)
 - 9 containers up: admin, dozzle, mysql, redis, updater, disk_collector, kiwix_server, kolibri_2, qdrant.
@@ -69,41 +78,91 @@ After `build-backup-os.sh` ran, `sudo` rejected the correct password; a reboot f
 the toolkit touches host accounts; the chroot `passwd`/`useradd` calls act on `NOMAD_ROOT`. If it
 recurs: `faillock --user dkenzik`.
 
-### 3. Confirm the offline-asset scripts completed
-The user ran `save-images.sh`, `build-pkgcache.sh --gpu=vulkan` and `build-backup-os.sh --user
-dkenzik 2>&1 | tee ~/backup-os.log` but their outputs were never reviewed. Check:
-```
-sudo cat /mnt/nomad/host-bootstrap/docker-images/GENERATION /mnt/nomad/host-bootstrap/docker-images/IMAGES.txt
-sudo ls -la /mnt/nomad/host-bootstrap/docker-images/ /mnt/nomad/host-bootstrap/pkgcache/
-sudo cat /mnt/nomad/host-bootstrap/pkgcache/GLIBC_VERSION /mnt/nomad/host-bootstrap/installed-services.txt
-tail -30 ~/backup-os.log
-```
-Expected manifest: `nomad_kiwix_server`, `nomad_kolibri_2`, `nomad_qdrant`.
+### 3. Offline-asset scripts — DONE, verified 2026-09-23
+`docker-images/`: `GENERATION 20260923T185117Z`, `nomad-images.tar.zst` 1.1 GB, `IMAGES.txt` has all
+9 images (project-nomad v1.34.1, dozzle v10.0, disk-collector, sidecar-updater, kiwix-serve 3.8.1,
+kolibri 0.19.4, mysql 8.0, qdrant v1.16, redis 7-alpine). `installed-services.txt` =
+`nomad_kiwix_server nomad_kolibri_2 nomad_qdrant`. `pkgcache/GLIBC_VERSION 2.44+r24+g16be1518495f-1`.
 
-### 4. Backup OS: build result unknown, never booted, has the OLD unit
-`build-backup-os.sh` is the one script never tested before this run. If `~/backup-os.log` does not
-end with "Backup OS ready", re-run it (safe: it only reformats p2/p3; NOMAD keeps running on p4).
-Then: reboot → firmware boot menu (F7 on most MINISFORUM units; Del = Setup) → the Lexar "UEFI OS"
-entry → log in as `dkenzik`. First boot loads the image archive before the login screen appears
-(old oneshot unit; several minutes; `Esc` shows console). Verify:
+### 4. Backup OS: first boot verified 2026-09-23 15:57; toolkit update on it still pending
+`~/backup-os.log` ends with "Backup OS ready" and the script's verify step raised no warnings.
+Two log entries that look like errors and are not: (a) three 404s from `archlinux.cachyos.org`
+during pacstrap (glibc, libgfortran, ttf-dejavu) fell back to another mirror and installed;
+(b) stage 1's `Updating linux initcpios` hook fails with `call to execv failed` because stage 1
+has no kernel yet; stage 2 built both initramfs images (`linux-cachyos 7.2.5`, `linux-cachyos-lts
+6.18.50`) successfully.
+The OS as built has NO sshd. The toolkit now installs `openssh`, opens 22/tcp in ufw and copies the
+user's `authorized_keys` (uncommitted change to `build-backup-os.sh` + README, 2026-09-23 evening).
+DONE on the built OS 2026-09-23 via chroot from the primary, kept for reference (ufw is flipped to
+ENABLED=no around the rule add so it writes `user.rules` instead of programming the primary's
+netfilter; verified: rule present, `ENABLED=yes`, `sshd.service` enabled, `authorized_keys` 0600):
 ```
-systemctl --no-pager -n 15 status project-nomad nomad-ollama
-sudo docker ps --format '{{.Names}}\t{{.Status}}' | sort
-curl -s localhost:8080/api/health; cat /var/lib/nomad-host/images.generation; cat /etc/nomad-host.conf
+T=/run/nomad-backup-os; sudo mkdir -p $T
+sudo mount /dev/disk/by-partlabel/NOMAD_ROOT $T
+sudo mount -o fmask=0077,dmask=0077 /dev/disk/by-partlabel/NOMAD_ESP $T/boot
+sudo arch-chroot $T pacman -Syu --needed --noconfirm openssh
+sudo arch-chroot $T systemctl enable sshd.service
+sudo sed -i 's/^ENABLED=yes/ENABLED=no/' $T/etc/ufw/ufw.conf
+sudo arch-chroot $T ufw allow 22/tcp comment sshd
+sudo sed -i 's/^ENABLED=no/ENABLED=yes/' $T/etc/ufw/ufw.conf
+sudo install -d -m700 $T/home/dkenzik/.ssh
+sudo install -m600 ~/.ssh/authorized_keys $T/home/dkenzik/.ssh/authorized_keys
+sudo arch-chroot $T chown -R dkenzik:dkenzik /home/dkenzik/.ssh
+sudo grep -- '--dport 22 ' $T/etc/ufw/user.rules; sudo grep ENABLED $T/etc/ufw/ufw.conf
+sudo umount -R $T
 ```
-Then update its toolkit from the drive's copy (flags from its `/etc/nomad-host.conf`; GPU there is
-`vulkan,cuda,rocm` unless `--no-nvidia/--no-rocm` was used):
+Booting it: `sudo efibootmgr --bootnext 0007 && sudo reboot` from the primary (one-shot; BootOrder
+stays primary-first, so a plain reboot returns to the primary), or F7 at power-on → the Lexar
+"UEFI OS" entry. It takes the primary's DHCP lease (10.0.10.186) with its own host key; the daily
+driver has `ssh nomad-rescue` (alias → that IP, own `UserKnownHostsFile`). sshd does not wait for
+`project-nomad.service`. `hostname` binary is absent (no inetutils) — `nomad-up` now uses `ip`.
+
+First boot 2026-09-23 15:57, verified over SSH:
+- `nomad-rescue`, kernel `7.2.5-1-cachyos`, `root=UUID=0244d04a…`, `/` `/boot` `/mnt/nomad` all on
+  the Lexar, `BootCurrent 0007`, no firmware entries added, no non-x86_64 packages. Login screen is
+  stock SDDM/Plasma without CachyOS theming — expected for a pacstrap, and a handy tell.
+- sshd/ufw/NetworkManager/docker/nomad-ollama (0.34.3 generic) active; preflight applied the deferred
+  Ollama ufw rule and loaded image archive `20260923T185117Z`; compose up; kiwix, kolibri, qdrant
+  adopted; `project-nomad` finished. `/etc/nomad-host.conf` there: `GPU=vulkan,cuda,rocm`.
+- From the LAN: `:8080` ok, `:8310` Kolibri answers, `:8090` Kiwix serves "Wikipedia 100" (the ZIM
+  downloaded on the primary), `:11434` times out (ufw). Kolibri has no channels yet.
+- Old oneshot unit confirmed there: `project-nomad.service +1min 16s` → `graphical.target` at 1:26.
+
+Remaining, on the rescue OS (root; the drive's toolkit copy is at the `663c377` state, which has
+the new unit):
 ```
 sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh --autostart --expose=lan --gpu=vulkan,cuda,rocm --yes
+systemctl cat project-nomad | grep -E '^(Type|ExecStart)='   # expect Type=exec, nomad-start
+sudo efibootmgr --bootnext 0007 && sudo reboot                # come back to the rescue OS once more
 ```
-Open `http://localhost:8080` there and confirm the ZIMs and Kolibri content are visible.
+Then `systemd-analyze critical-chain graphical.target` there (expect `project-nomad.service` in ms),
+then a plain `sudo reboot` to return to the primary.
+
+### 4b. Ollama runs CPU-only: iGPU dropped by default (found 2026-09-23 on the rescue OS)
+`journalctl -u nomad-ollama` shows `dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1`
+for both the ROCm (gfx1150) and Vulkan (RADV STRIX1) views of the Radeon 890M, then
+`inference compute … library=cpu`, `total_vram=0 B`. Ollama ≥ 0.34 skips iGPUs by default; the
+primary (0.34.2) almost certainly does the same — confirm there with the same journal grep.
+Fix: `Environment=OLLAMA_IGPU_ENABLE=1` added to `units/nomad-ollama.service` (uncommitted). GPU
+device nodes (`/dev/dri/renderD128`, `/dev/kfd`) are 0666 on CachyOS, so no group change is needed.
+Rollout: commit → on the primary `git pull` + `bootstrap-host.sh` re-run (installs the unit and
+refreshes the drive's toolkit copy) → on the rescue OS re-run bootstrap from the drive copy. For the
+immediate test the unit was installed by hand on the rescue OS (16:2x): Ollama now reports
+`inference compute library=ROCm compute=gfx1150 type=iGPU total="30.2 GiB"`, `default_num_ctx=32768`.
+It picked ROCm over Vulkan (both installed there). Untested until a model exists: whether gfx1150
+loads under the bundled rocBLAS (`rocm_v7_2`) — if not, `HSA_OVERRIDE_GFX_VERSION=11.0.2` in the
+unit or removing `ollama-rocm` on the rescue OS. The primary has only `ollama-vulkan` → Vulkan.
+"No Models Installed" in the AI Assistant is expected until a model is pulled: `blobs/` on the
+datastore has been empty since creation (`total blobs: 0`); "Remote Connected" confirms
+`host.docker.internal:11434` works on the rescue OS too.
 
 ### 5. Remaining verification (from the plan)
 - Offline start on the primary: `nmcli networking off; sudo nomad-down; sudo nomad-up` with no pull.
 - Exposure: `:8080` reachable from a LAN device; `sudo nomad-expose local` blocks it (confirms the
   DOCKER-USER rule under iptables-nft); `curl <ip>:11434` from the LAN refused.
 - Clean stop: `sudo nomad-down --unmount` then `sudo e2fsck -fn /dev/disk/by-partlabel/NOMAD_DATA`.
-- `efibootmgr` on the primary shows no new "Limine" entry from the chroot build.
+- DONE: `efibootmgr` on the primary shows no "Limine" entry from the chroot build (only the
+  firmware's own `Boot0007 UEFI OS` for `NOMAD_ESP`).
 - Model pulled in the UI lands in `/mnt/nomad/ollama/models` (614:614).
 
 ### 6. Later
