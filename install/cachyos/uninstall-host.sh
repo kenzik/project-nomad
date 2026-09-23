@@ -26,7 +26,8 @@ mountpoint -q "$NOMAD_MNT" && systemctl stop mnt-nomad.mount
 
 rm -f /etc/systemd/system/{project-nomad,nomad-ollama,nomad-expose-local}.service \
       /etc/udev/rules.d/99-nomad-autostart.rules /etc/sysusers.d/ollama.conf \
-      /usr/local/bin/{nomad-up,nomad-down,nomad-expose} "$NOMAD_HOST_CONF"
+      /usr/local/bin/{nomad-up,nomad-down,nomad-expose} "$NOMAD_HOST_CONF" \
+      /etc/NetworkManager/conf.d/50-nomad-unmanaged.conf
 rm -rf /usr/local/lib/nomad "$NOMAD_HOST_STATE"
 [[ -L /opt/project-nomad ]] && rm -f /opt/project-nomad
 
@@ -39,4 +40,5 @@ command -v ufw >/dev/null && ufw delete allow in on "$NOMAD_BRIDGE" to any port 
 
 systemctl daemon-reload
 udevadm control --reload
+systemctl try-reload-or-restart NetworkManager.service 2>/dev/null
 info "Host-side NOMAD setup removed. The datastore was not modified."

@@ -147,6 +147,14 @@ can reach port 8080 can gain root on the host. Docker-published ports bypass ufw
 networks you control; run `sudo nomad-expose local` before joining any other network. Native Ollama
 (11434) is never exposed to the LAN while ufw is active.
 
+### Offline use
+NOMAD needs no network once the images are loaded; `nmcli networking off` (or no cable) is fine.
+`bootstrap-host.sh` installs `/etc/NetworkManager/conf.d/50-nomad-unmanaged.conf` so NetworkManager
+leaves Docker's bridges alone: without it, NetworkManager "assumes" `br-nomad`, and networking-off,
+suspend and resume strip its address, after which the host cannot reach the containers (every
+published port times out, even from `localhost`). Recovery on a host without the drop-in:
+`sudo ip addr add 172.18.0.1/16 dev br-nomad` (check the subnet with `docker network inspect`).
+
 ## If the computer dies
 1. Move the drive to an NVMe USB enclosure and plug it into any x86-64 PC.
 2. Firmware boot menu → the USB drive. Secure Boot must be off on that PC (Limine is not

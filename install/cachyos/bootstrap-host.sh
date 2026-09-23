@@ -166,6 +166,12 @@ install_files() {
   fi
   live udevadm control --reload
 
+  # NetworkManager must not assume Docker's bridges (see the file's header).
+  if [[ -d /etc/NetworkManager ]]; then
+    install -Dm644 "$here/units/50-nomad-unmanaged.conf" /etc/NetworkManager/conf.d/50-nomad-unmanaged.conf
+    live systemctl try-reload-or-restart NetworkManager.service
+  fi
+
   # Convenience only; compose.yml binds real /mnt/nomad paths.
   if [[ -e /opt/project-nomad && ! -L /opt/project-nomad ]]; then
     warn "/opt/project-nomad exists and is not a symlink; leaving it alone"

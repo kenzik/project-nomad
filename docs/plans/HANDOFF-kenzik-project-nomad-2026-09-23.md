@@ -166,10 +166,8 @@ Second `--refresh` (after `91dd56d`/`16519a5`) completed the greeter system setu
 and PAM keyring: login without the keyring dialog (`login.keyring` created), desktop matches the
 primary with the Nord palette, logout → greeter visible → login again. That refresh also re-ran
 `bootstrap-host.sh --chroot`, so the rescue OS's units are the toolkit's (hygiene item closed).
-Leftover from the debugging session to clean up when convenient: `[output] scale = 2` may still be
-appended to `/var/lib/noctalia-greeter/greeter.toml` on the rescue OS (added as a test; harmless on
-the Dell, wrong for other displays) — `sudo tail -3 /var/lib/noctalia-greeter/greeter.toml` and
-delete those lines if present.
+Leftover `[output] scale = 2.0` block in `/var/lib/noctalia-greeter/greeter.toml` on the rescue OS:
+removed by the user 2026-09-23 18:2x (file now ends with `[auth]` and `[session]` only).
 Applied with `--refresh` (commits `8cecde6`…`91dd56d`); verified over SSH after reboot: greetd runs
 `noctalia-greeter` (sddm disabled), all Hyprland `config/*.lua` present, Noctalia `builtin = "Nord"`
 in config and state, black wallpaper, 84 JuliaMono faces (carried from the AUR package), shell zsh,
@@ -220,10 +218,36 @@ own a `login.keyring`; check `~/.local/share/keyrings/` there.
 ### 5. Remaining verification (from the plan)
 - Both OSes now default to the LTS kernel (primary 6.18.52, rescue 6.18.50); logout → greeter
   verified on both. When a newer 7.2.x lands, test logout on it before switching `BOOT_ORDER` back.
-- Offline start on the primary: `nmcli networking off; sudo nomad-down; sudo nomad-up` with no pull.
-- Exposure: `:8080` reachable from a LAN device; `sudo nomad-expose local` blocks it (confirms the
-  DOCKER-USER rule under iptables-nft); `curl <ip>:11434` from the LAN refused.
-- Clean stop: `sudo nomad-down --unmount` then `sudo e2fsck -fn /dev/disk/by-partlabel/NOMAD_DATA`.
+- Offline start on the primary: FAILED first attempt 2026-09-23 18:31–18:37, real bug found and
+  fixed in the toolkit (uncommitted → see the commit after `c57d9da`); re-test pending.
+  Run it as a transient unit so it survives the SSH session dropping:
+  `sudo systemd-run --unit=nomad-offline-test --collect bash -c 'trap "nmcli networking on" EXIT; nmcli networking off; sleep 2; nomad-down; READY_TIMEOUT=300 nomad-up'`
+  then `journalctl -u nomad-offline-test`.
+  What happened: compose came up (mysql/redis healthy 18:32:55, admin started), but `nomad-up` got
+  `Connection reset by peer` from `localhost:8080` for the full 300 s. Cause: NetworkManager 1.58.1
+  had assumed Docker's `br-nomad` (and `docker0`) as "external" connections
+  (`nmcli device` showed `connected (externally)`); `networking off` deactivated them
+  (`state change: activated -> deactivating (reason 'networking-off', managed-type: 'external')`)
+  and flushed `172.18.0.1/16`; `networking on` re-activated `br-nomad` with an empty profile, so the
+  address never came back. With no route to 172.18.0.0/16 docker-proxy cannot dial the containers
+  → every published port dead, even from localhost, while container-to-container traffic (admin →
+  mysql) is fine. NM's suspend/resume path is the same code, so a suspend would do this too.
+  Fix: `units/50-nomad-unmanaged.conf` → `/etc/NetworkManager/conf.d/` (`unmanaged-devices=
+  interface-name:br-nomad;docker0;br-*;veth*`), installed by `bootstrap-host.sh` (+ NM reload),
+  removed by `uninstall-host.sh`. Immediate recovery: `sudo ip addr add 172.18.0.1/16 dev br-nomad`.
+  Rollout: primary `git pull` + bootstrap re-run (refreshes the drive copy) → rescue OS bootstrap
+  re-run from `/mnt/nomad/host-bootstrap/toolkit` (it has NM too). Then re-run the offline test.
+- DONE 2026-09-23 18:3x on the rescue OS (toolkit is identical on both): with `nomad-expose local`
+  every published port (`:8080 :8310 :8090 :8311`) times out from the LAN while `localhost:*` and the
+  host's own LAN IP still answer — the DOCKER-USER rule works under iptables-nft. `nomad-expose lan`
+  restores 302/302/200. `:11434` from the LAN times out in both modes (ufw default deny drops, so
+  "timeout", not "refused"). Note the app ports are published by the admin with `0.0.0.0` and `::`
+  docker-proxy listeners; the host has no global IPv6, so the userland-proxy IPv6 bypass of
+  DOCKER-USER is moot here but would apply on an IPv6-routed LAN.
+- DONE 2026-09-23 18:23 on the rescue OS: `nomad-down --unmount` (clean; containers stopped apps
+  first, then mysql/redis) → `e2fsck -fn /dev/disk/by-partlabel/NOMAD_DATA` clean, `1094/57040896
+  files, 4426201/912640081 blocks`, under a minute → `nomad-up` healthy in ~35 s, apps re-started
+  by `nomad-start-children`, ports answering again.
 - DONE: `efibootmgr` on the primary shows no "Limine" entry from the chroot build (only the
   firmware's own `Boot0007 UEFI OS` for `NOMAD_ESP`).
 - DONE (via API on the rescue OS): a pulled model lands in `/mnt/nomad/ollama/models` as 614:614.
