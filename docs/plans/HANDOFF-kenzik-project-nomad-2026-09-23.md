@@ -218,8 +218,14 @@ own a `login.keyring`; check `~/.local/share/keyrings/` there.
 ### 5. Remaining verification (from the plan)
 - Both OSes now default to the LTS kernel (primary 6.18.52, rescue 6.18.50); logout → greeter
   verified on both. When a newer 7.2.x lands, test logout on it before switching `BOOT_ORDER` back.
-- Offline start on the primary: FAILED first attempt 2026-09-23 18:31–18:37, real bug found and
-  fixed in the toolkit (uncommitted → see the commit after `c57d9da`); re-test pending.
+- Offline start on the primary: DONE 2026-09-23 18:46 after the fix in `0f7044e` (first attempt
+  18:31–18:37 failed, see below). Re-run: networking off 18:45:01 → `nomad-down` 18:45:35 →
+  `NOMAD is up` 18:46:10, no pull/registry lines in the docker log, NM left `br-nomad` alone,
+  networking restored by the trap, all ports answering. The 28 `[resolver] connect failed` docker
+  warnings are containers trying DNS while offline; harmless.
+  Rescue OS still needs the drop-in: boot it and run
+  `sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh --autostart --expose=lan --gpu=vulkan,cuda,rocm --yes`
+  (the drive copy was refreshed 18:44), then `nmcli device status | grep br-nomad` → `unmanaged`.
   Run it as a transient unit so it survives the SSH session dropping:
   `sudo systemd-run --unit=nomad-offline-test --collect bash -c 'trap "nmcli networking on" EXIT; nmcli networking off; sleep 2; nomad-down; READY_TIMEOUT=300 nomad-up'`
   then `journalctl -u nomad-offline-test`.
