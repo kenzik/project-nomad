@@ -135,14 +135,16 @@ sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh --autostart --expo
 systemctl cat project-nomad | grep -E '^(Type|ExecStart)='   # expect Type=exec, nomad-start
 sudo efibootmgr --bootnext 0007 && sudo reboot                # come back to the rescue OS once more
 ```
-Then `systemd-analyze critical-chain graphical.target` there (expect `project-nomad.service` in ms),
-then a plain `sudo reboot` to return to the primary.
+DONE 2026-09-23 16:23: after the toolkit update and reboot, `project-nomad.service +10ms`,
+`graphical.target` at 9.3 s (was 1 min 26 s), Ollama on ROCm from boot, model persisted.
+The rescue OS still has the hand-installed `nomad-ollama.service` (same content as `11e8c7a`);
+re-run bootstrap from the drive copy there once the primary has refreshed it.
 
 ### 4b. Ollama runs CPU-only: iGPU dropped by default (found 2026-09-23 on the rescue OS)
 `journalctl -u nomad-ollama` shows `dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1`
 for both the ROCm (gfx1150) and Vulkan (RADV STRIX1) views of the Radeon 890M, then
 `inference compute … library=cpu`, `total_vram=0 B`. Ollama ≥ 0.34 skips iGPUs by default; the
-primary (0.34.2) almost certainly does the same — confirm there with the same journal grep.
+primary (0.34.2) confirmed the same 2026-09-23 16:27 (`dropping integrated GPU … library=Vulkan`).
 Fix: `Environment=OLLAMA_IGPU_ENABLE=1` added to `units/nomad-ollama.service` (uncommitted). GPU
 device nodes (`/dev/dri/renderD128`, `/dev/kfd`) are 0666 on CachyOS, so no group change is needed.
 Rollout: commit → on the primary `git pull` + `bootstrap-host.sh` re-run (installs the unit and
@@ -152,14 +154,17 @@ immediate test the unit was installed by hand on the rescue OS (16:2x): Ollama n
 It picked ROCm over Vulkan (both installed there). Tested with `qwen3:0.6b` (pulled via the API,
 522 MB, on the datastore as ollama:ollama): `offloaded 29/29 layers to GPU`, load 1.6 s, generate
 OK; ROCm gfx1150 works under the bundled `rocm_v7_2`. The primary has only `ollama-vulkan` → Vulkan;
-verify there after the rollout: `journalctl -b -u nomad-ollama | grep "inference compute"` and the
-same generate. Committed as `11e8c7a`; rollout on the primary = `git pull` + bootstrap re-run +
-`sudo systemctl restart nomad-ollama`.
+rolled out to the primary 2026-09-23 16:30 (`git pull` → `bc8f4c3`, bootstrap re-run, Ollama
+restarted): `inference compute library=Vulkan … type=iGPU total_vram=32.2 GiB`, `offloaded 29/29
+layers`, generate OK. Both OSes now run the model on the 890M. The drive's toolkit copy is current.
 "No Models Installed" in the AI Assistant is expected until a model is pulled: `blobs/` on the
 datastore has been empty since creation (`total blobs: 0`); "Remote Connected" confirms
 `host.docker.internal:11434` works on the rescue OS too.
 
 ### 5. Remaining verification (from the plan)
+- Rescue OS hygiene: re-run `sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh
+  --autostart --expose=lan --gpu=vulkan,cuda,rocm --yes` there so its hand-installed
+  `nomad-ollama.service` comes from the toolkit (same content; no behaviour change).
 - Offline start on the primary: `nmcli networking off; sudo nomad-down; sudo nomad-up` with no pull.
 - Exposure: `:8080` reachable from a LAN device; `sudo nomad-expose local` blocks it (confirms the
   DOCKER-USER rule under iptables-nft); `curl <ip>:11434` from the LAN refused.
@@ -174,3 +179,7 @@ datastore has been empty since creation (`total blobs: 0`); "Remote Connected" c
 - Optional iGPU GTT tuning for larger models (unverified): `ttm.pages_limit` / `ttm.page_pool_size`
   in `/etc/default/limine`, small BIOS UMA buffer.
 - Decide whether to open a PR from `cachyos-portable` or keep it as a long-lived fork branch.
+- Backup OS look: it is a bare pacstrap (stock SDDM with no theme config, plain Plasma, bash), not
+  a copy of the primary's CachyOS theming. If it should match, list the primary's `cachyos-*` /
+  SDDM-theme packages (`pacman -Qq | grep cachyos`) and add the arch-generic ones to the desktop
+  list in `build-backup-os.sh`; they can be installed on the existing rescue OS with `pacman -S`.
