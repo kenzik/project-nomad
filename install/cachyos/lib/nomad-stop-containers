@@ -1,0 +1,25 @@
+#!/bin/bash
+# ExecStopPost for project-nomad.service. Lives on the host so it still runs after a surprise
+# removal of the datastore. Apps stop first; MySQL and Redis stop last with a long grace period
+# (Docker's default 10 s before SIGKILL is tight for InnoDB).
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+# Record what is installed so another host can re-adopt it. Only trusted when this session
+# finished adoption; otherwise a fresh host with no app containers would blank the manifest.
+if [[ -f $NOMAD_RUN/adopted ]] && mountpoint -q "$NOMAD_MNT" && [[ -d $NOMAD_HB ]]; then
+  list_app_containers | sort > "$NOMAD_MANIFEST.tmp" && mv -f "$NOMAD_MANIFEST.tmp" "$NOMAD_MANIFEST"
+fi
+
+mapfile -t running < <(docker ps --filter 'name=^nomad_' --format '{{.Names}}')
+db=(); app=()
+for c in "${running[@]}"; do
+  case $c in
+    nomad_mysql|nomad_redis) db+=("$c") ;;
+    *) app+=("$c") ;;
+  esac
+done
+((${#app[@]})) && docker stop -t 30 "${app[@]}"
+((${#db[@]}))  && docker stop -t 90 "${db[@]}"
+rm -f "$NOMAD_RUN/adopted"
+exit 0

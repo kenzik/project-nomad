@@ -1,0 +1,27 @@
+# Project N.O.M.A.D. lifecycle, bound to the datastore mount.
+# Never use `docker compose down` here: app containers created by the admin share the
+# project-nomad_default network and would block or be orphaned by it.
+[Unit]
+Description=Project N.O.M.A.D. (datastore on NOMAD_DATA)
+Requires=docker.service
+Wants=nomad-ollama.service
+After=docker.service mnt-nomad.mount nomad-ollama.service
+BindsTo=mnt-nomad.mount
+AssertPathExists=/mnt/nomad/project-nomad/compose.yml
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# A first start on a new host may load a multi-GB image archive.
+TimeoutStartSec=30min
+TimeoutStopSec=5min
+ExecStartPre=/usr/local/lib/nomad/nomad-preflight
+ExecStart=/usr/bin/docker compose -p project-nomad -f /mnt/nomad/project-nomad/compose.yml up -d
+ExecStart=-/usr/local/lib/nomad/nomad-start-children
+ExecStartPost=-/usr/local/lib/nomad/nomad-adopt-host
+# ExecStopPost also runs when start fails, and its script lives on the host, so containers are
+# stopped even if the drive has vanished.
+ExecStopPost=/usr/local/lib/nomad/nomad-stop-containers
+
+[Install]
+WantedBy=multi-user.target

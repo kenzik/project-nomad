@@ -1,0 +1,14 @@
+#!/bin/bash
+# Start every existing NOMAD app container that is not running. The management stack is
+# already up via compose; apps were stopped by nomad-stop-containers on the last clean stop.
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+mapfile -t stopped < <(docker ps -a --filter 'name=^nomad_' \
+  --filter status=exited --filter status=created --format '{{.Names}}')
+
+for c in "${stopped[@]}"; do
+  is_mgmt_container "$c" && continue
+  if docker start "$c" >/dev/null; then info "Started $c"; else warn "Failed to start $c"; fi
+done
+exit 0

@@ -1,0 +1,31 @@
+#!/bin/bash
+# ExecStartPre for project-nomad.service: refuse to start without the datastore, apply any
+# firewall rule deferred from a chroot bootstrap, and load the image archive when it is newer
+# than what this host last loaded.
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+mountpoint -q "$NOMAD_MNT" || die "$NOMAD_MNT is not mounted"
+[[ -f $NOMAD_COMPOSE ]] || die "$NOMAD_COMPOSE missing; run init-nomad-data.sh first"
+
+mkdir -p "$NOMAD_HOST_STATE" "$NOMAD_RUN"
+rm -f "$NOMAD_RUN/adopted"
+
+if [[ -f $NOMAD_HOST_STATE/pending-ufw ]] && command -v ufw >/dev/null; then
+  if ufw allow in on "$NOMAD_BRIDGE" to any port 11434 proto tcp comment 'NOMAD containers -> native Ollama' >/dev/null; then
+    rm -f "$NOMAD_HOST_STATE/pending-ufw"
+    info "Applied deferred ufw rule for Ollama"
+  fi
+fi
+
+gen_drive=$(cat "$NOMAD_IMAGES_DIR/GENERATION" 2>/dev/null || true)
+gen_host=$(cat "$NOMAD_HOST_STATE/images.generation" 2>/dev/null || true)
+if [[ -n $gen_drive && $gen_drive != "$gen_host" && -f $NOMAD_IMAGES_ARCHIVE ]]; then
+  info "Loading image archive generation $gen_drive (host has: ${gen_host:-none})"
+  if zstd -dc "$NOMAD_IMAGES_ARCHIVE" | docker load; then
+    echo "$gen_drive" > "$NOMAD_HOST_STATE/images.generation"
+  else
+    warn "docker load failed; continuing with whatever images this host already has"
+  fi
+fi
+exit 0

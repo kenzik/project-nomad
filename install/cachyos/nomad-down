@@ -1,0 +1,41 @@
+#!/bin/bash
+# Stop Project NOMAD cleanly.
+#   nomad-down            stop containers and Ollama; leave the datastore mounted
+#   nomad-down --unmount  also unmount /mnt/nomad
+#   nomad-down --eject    also power off the drive (USB enclosures only)
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+need_root "$@"
+
+mode=${1:-}
+case $mode in ''|--unmount|--eject) ;; *) die "Usage: nomad-down [--unmount|--eject]" ;; esac
+
+systemctl stop project-nomad.service
+systemctl stop nomad-ollama.service
+sync
+info "NOMAD stopped"
+[[ -z $mode ]] && exit 0
+
+mountpoint -q "$NOMAD_MNT" || { info "$NOMAD_MNT already unmounted"; exit 0; }
+part=$(findmnt -no SOURCE "$NOMAD_MNT")
+disk=$(disk_of "$part")
+
+if ! systemctl stop mnt-nomad.mount; then
+  fuser -vm "$NOMAD_MNT" || true
+  die "Could not unmount $NOMAD_MNT; processes above still hold it"
+fi
+info "Unmounted $NOMAD_MNT"
+[[ $mode == --eject ]] || exit 0
+
+# Never power off a disk this OS is running from (the backup OS shares the drive), or one
+# that is not removable.
+[[ $(lsblk -dno TRAN "/dev/$disk") == usb ]] || die "/dev/$disk is not a USB device; not powering off"
+for mp in / /boot /home; do
+  for d in $(disks_backing "$mp"); do
+    [[ $d == "$disk" ]] && die "$mp lives on /dev/$disk; not powering off"
+  done
+done
+if lsblk -nro MOUNTPOINTS "/dev/$disk" | grep -q .; then
+  die "Other partitions of /dev/$disk are still mounted; not powering off"
+fi
+udisksctl power-off -b "/dev/$disk" && info "/dev/$disk powered off; safe to unplug"

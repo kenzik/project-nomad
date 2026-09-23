@@ -1,0 +1,34 @@
+# Native Ollama for Project NOMAD, with models on the NOMAD datastore.
+# Replaces the packaged ollama.service, which hardcodes OLLAMA_MODELS=/var/lib/ollama and orders
+# itself after network-online.target (stalls with no network).
+[Unit]
+Description=Ollama for Project NOMAD (models on NOMAD_DATA)
+After=network.target mnt-nomad.mount
+BindsTo=mnt-nomad.mount
+Conflicts=ollama.service
+ConditionPathIsDirectory=/mnt/nomad/ollama/models
+
+[Service]
+ExecStart=/usr/bin/ollama serve
+User=ollama
+Group=ollama
+StateDirectory=ollama
+WorkingDirectory=/var/lib/ollama
+Environment=HOME=/var/lib/ollama
+Environment=OLLAMA_MODELS=/mnt/nomad/ollama/models
+# Containers reach the host through the Docker bridge gateway, so loopback is not enough.
+# ufw restricts 11434 to the br-nomad interface (see bootstrap-host.sh).
+Environment=OLLAMA_HOST=0.0.0.0:11434
+# Parity with the env NOMAD gives its own Ollama container (admin/app/services/docker_service.ts).
+Environment=OLLAMA_NO_CLOUD=1
+Environment=OLLAMA_FLASH_ATTENTION=1
+Environment=OLLAMA_VULKAN=1
+Restart=on-failure
+RestartSec=3
+RestartPreventExitStatus=1
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

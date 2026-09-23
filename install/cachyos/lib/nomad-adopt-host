@@ -1,0 +1,51 @@
+#!/bin/bash
+# Re-create app containers on a host that has the datastore but not the containers.
+#
+# Containers live in each host's Docker, not on the drive. When they are missing, the admin's
+# _syncContainersWithDatabase (admin/app/services/system_service.ts) flips the services to
+# "not installed" and the DB forgets them. The manifest on the drive remembers; this script
+# asks the admin to install each one again. Bind-mounted data is reused as-is.
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-600}
+INSTALL_TIMEOUT=${INSTALL_TIMEOUT:-1200}
+
+mkdir -p "$NOMAD_RUN"
+
+info "Waiting for the admin at $NOMAD_ADMIN_URL"
+deadline=$((SECONDS + HEALTH_TIMEOUT))
+until curl -fsS -o /dev/null "$NOMAD_ADMIN_URL/api/health"; do
+  ((SECONDS < deadline)) || die "Admin did not become healthy within ${HEALTH_TIMEOUT}s"
+  sleep 3
+done
+
+# Listing services triggers the container/DB sync, so "installed" reflects this host.
+curl -fsS -o /dev/null "$NOMAD_ADMIN_URL/api/system/services" || warn "Service listing failed"
+
+if [[ -f $NOMAD_MANIFEST ]]; then
+  # Qdrant first: other services declare it as a dependency.
+  mapfile -t wanted < <( { grep -x 'nomad_qdrant' "$NOMAD_MANIFEST"; grep -vx 'nomad_qdrant' "$NOMAD_MANIFEST"; } | grep -v '^\s*$')
+  for svc in "${wanted[@]}"; do
+    # Native Ollama owns 11434; the containerized one must never come back.
+    [[ $svc == nomad_ollama ]] && continue
+    is_mgmt_container "$svc" && continue
+    docker container inspect "$svc" >/dev/null 2>&1 && continue
+
+    info "Adopting $svc"
+    if ! curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
+         -d "{\"service_name\":\"$svc\"}" "$NOMAD_ADMIN_URL/api/system/services/install"; then
+      warn "Install request for $svc was rejected; install it from the NOMAD UI"
+      continue
+    fi
+    # Installs run asynchronously in the admin; serialize them.
+    deadline=$((SECONDS + INSTALL_TIMEOUT))
+    until docker container inspect "$svc" >/dev/null 2>&1; do
+      ((SECONDS < deadline)) || { warn "$svc did not appear within ${INSTALL_TIMEOUT}s"; break; }
+      sleep 5
+    done
+  done
+fi
+
+touch "$NOMAD_RUN/adopted"
+exit 0

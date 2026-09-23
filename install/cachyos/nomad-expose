@@ -1,0 +1,26 @@
+#!/bin/bash
+# Switch who can reach NOMAD's published ports.
+#   nomad-expose lan     anyone on the network (the admin API has no auth and holds the Docker
+#                        socket, so this grants root-equivalent access to that network)
+#   nomad-expose local   this machine only
+#   nomad-expose status
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+mode=${1:-status}
+if [[ $mode == status ]]; then
+  if systemctl is-active --quiet nomad-expose-local.service; then echo local; else echo lan; fi
+  exit 0
+fi
+need_root "$@"
+
+case $mode in
+  local) systemctl enable --now nomad-expose-local.service ;;
+  lan)   systemctl disable --now nomad-expose-local.service ;;
+  *)     die "Usage: nomad-expose lan|local|status" ;;
+esac
+
+touch "$NOMAD_HOST_CONF"
+sed -i '/^EXPOSE=/d' "$NOMAD_HOST_CONF"
+echo "EXPOSE=$mode" >> "$NOMAD_HOST_CONF"
+info "Exposure set to: $mode"

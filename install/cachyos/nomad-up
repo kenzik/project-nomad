@@ -1,0 +1,26 @@
+#!/bin/bash
+# Start Project NOMAD (mounts the datastore if needed, via the unit's BindsTo).
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+need_root "$@"
+
+# A mount whose device vanished (surprise unplug) blocks a fresh mount; clear it.
+if mountpoint -q "$NOMAD_MNT"; then
+  src=$(findmnt -no SOURCE "$NOMAD_MNT")
+  if [[ -n $src && ! -b $src ]]; then
+    warn "Stale mount on $NOMAD_MNT (device $src is gone); detaching"
+    umount -l "$NOMAD_MNT"
+  fi
+fi
+
+systemctl start project-nomad.service || {
+  systemctl --no-pager --lines=20 status project-nomad.service
+  die "project-nomad.service failed to start"
+}
+
+info "NOMAD is up: $NOMAD_ADMIN_URL"
+if [[ $(. "$NOMAD_HOST_CONF" 2>/dev/null; echo "${EXPOSE:-lan}") == lan ]]; then
+  for ip in $(hostname -i 2>/dev/null); do
+    [[ $ip == 127.* || $ip == *:* ]] || info "LAN: http://$ip:8080"
+  done
+fi

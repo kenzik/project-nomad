@@ -1,0 +1,5 @@
+# Hotplug hosts only (bootstrap-host.sh --hotplug --autostart). @DATA_UUID@ is filled in at install.
+# Matched by filesystem UUID, not label: a stick labelled NOMAD_DATA must not get its compose.yml
+# run as root. SYSTEMD_WANTS fires when the device first appears; after `nomad-down` without
+# unplugging, use `nomad-up`.
+ACTION!="remove", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_UUID}=="@DATA_UUID@", TAG+="systemd", ENV{SYSTEMD_WANTS}+="project-nomad.service"

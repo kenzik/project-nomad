@@ -1,0 +1,16 @@
+# Restrict every NOMAD published port to this machine.
+# Docker-published ports are DNAT'd and accepted in FORWARD before ufw sees them, so ufw cannot
+# do this. DOCKER-USER is evaluated first; drop new connections entering br-nomad from outside it.
+[Unit]
+Description=Restrict Project NOMAD published ports to this machine
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER ! -i br-nomad -o br-nomad -m conntrack --ctstate NEW -j DROP 2>/dev/null || iptables -I DOCKER-USER ! -i br-nomad -o br-nomad -m conntrack --ctstate NEW -j DROP'
+ExecStop=/bin/sh -c 'iptables -D DOCKER-USER ! -i br-nomad -o br-nomad -m conntrack --ctstate NEW -j DROP || true'
+
+[Install]
+WantedBy=docker.service
