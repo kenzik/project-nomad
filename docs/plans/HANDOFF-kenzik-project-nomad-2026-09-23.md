@@ -161,6 +161,27 @@ layers`, generate OK. Both OSes now run the model on the 890M. The drive's toolk
 datastore has been empty since creation (`total blobs: 0`); "Remote Connected" confirms
 `host.docker.internal:11434` works on the rescue OS too.
 
+### 4c. Desktop parity for the rescue OS (in progress 2026-09-23 evening)
+The primary is NOT Plasma: it is the CachyOS Hyprland + Noctalia edition (`cachyos-hypr-noctalia`
+meta, `noctalia-greeter` on greetd with `/etc/greetd/environments` = `/usr/bin/Hyprland`, shell zsh
+with `cachyos-zsh-config` + `~/.p10k.zsh`, Noctalia palette `Ayu` pinned in
+`~/.config/noctalia/config.toml` and `~/.local/state/noctalia/settings.toml`, solid-black wallpaper
+at `~/.local/share/wallpapers/solid-black.png`, Hyprland config in Lua under `~/.config/hypr/`,
+monitor pinned by EDID description; `~/.local/bin/whispr` bound to Pause/Scroll_Lock/Insert).
+`build-backup-os.sh` now installs that stack, copies the user's desktop dotfiles, matches the login
+shell, enables systemd-resolved (required by `cachyos-settings`' `dns=systemd-resolved`) and avahi
+(`nomad-rescue.local`), writes `/etc/motd`, and patches the Noctalia palette to `--theme` (default
+`Nord`) as the visual tell. New `--refresh` mode applies it to the existing rescue OS in place.
+To apply (primary, root; ~2 GB of packages):
+```
+cd ~/project-nomad && git pull && cd install/cachyos
+sudo bash build-backup-os.sh --user dkenzik --refresh 2>&1 | tee ~/backup-os-refresh.log
+```
+Then boot the rescue OS (`sudo efibootmgr --bootnext 0007 && sudo reboot`) and check: greeter is
+Noctalia's, Hyprland session with your layout/binds, bar in the Nord palette, black wallpaper,
+`ssh nomad-rescue.local` resolves (then switch the daily driver's alias from the IP to it).
+Not carried over on purpose: `~/.local/bin` (whispr, herdr), Plymouth splash, `cachyos-hello`.
+
 ### 5. Remaining verification (from the plan)
 - Rescue OS hygiene: re-run `sudo bash /mnt/nomad/host-bootstrap/toolkit/bootstrap-host.sh
   --autostart --expose=lan --gpu=vulkan,cuda,rocm --yes` there so its hand-installed

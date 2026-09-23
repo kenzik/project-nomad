@@ -92,14 +92,25 @@ sudo bash build-pkgcache.sh --gpu=vulkan  # while online
 ```
 sudo bash build-backup-os.sh --user <login>
 ```
-Pacstraps a generic x86-64 CachyOS (Plasma, Firefox, Docker, Ollama with Vulkan/CUDA/ROCm) with an
-initramfs built without `autodetect`, Limine on the removable EFI path plus legacy BIOS, and no firmware
-boot entry. It asks for the last 4 characters of the disk serial before formatting. Flags:
-`--hostname`, `--no-desktop`, `--no-nvidia`, `--no-rocm`.
+Pacstraps a generic x86-64 CachyOS with an initramfs built without `autodetect`, Limine on the
+removable EFI path plus legacy BIOS, no firmware boot entry, Docker and Ollama (Vulkan/CUDA/ROCm),
+and the same desktop as a CachyOS Hyprland + Noctalia primary: `cachyos-hypr-noctalia`,
+`noctalia-greeter` on greetd, `cachyos-settings`/`-hooks`, zsh/fish configs, fonts. `<login>`'s
+desktop dotfiles (`~/.config/{hypr,noctalia,kitty,alacritty,gtk-*,qt*ct,…}`, `~/.zshrc`, `~/.p10k.zsh`,
+cursors, wallpapers, Noctalia state) and login shell are copied from this host; `~/.local/bin`
+tools, caches and `*.backup-*` files are not. The backup OS uses a different Noctalia palette
+(`--theme`, default `Nord`) so you can tell it from the primary, plus an `/etc/motd`. It asks for
+the last 4 characters of the disk serial before formatting. Flags: `--hostname`, `--theme`,
+`--no-desktop`, `--no-nvidia`, `--no-rocm`.
+
+`--refresh` updates an existing backup OS in place instead: no formatting, `pacman -Syu` with the
+same package set, configs re-applied, dotfiles re-synced, toolkit re-run. Use it after changing
+your desktop config on the primary or to pull in updates.
 
 `sshd` is enabled with port 22 open in ufw, and `<login>`'s `~/.ssh/authorized_keys` from this host
-is copied over. The backup OS has its own host key and hostname (`nomad-rescue`), so if it takes the
-same DHCP lease as the primary, use a separate `Host` alias with its own `UserKnownHostsFile`.
+is copied over. avahi publishes the hostname, so `ssh nomad-rescue.local` works; it has its own host
+key, so give it a separate `Host` alias with its own `UserKnownHostsFile`. Not carried over: the
+Plymouth boot splash (the portable initramfs has no plymouth hook).
 
 Test it: reboot, open the firmware boot menu, choose the datastore drive (or, from the primary,
 `sudo efibootmgr --bootnext <the "UEFI OS" entry on NOMAD_ESP> && sudo reboot`). NOMAD should come
