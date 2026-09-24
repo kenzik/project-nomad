@@ -318,6 +318,21 @@ Two problems met on the Kiwix side, both handled through the API:
   six categories report `<slug>-comprehensive`; queue empty; 62 ZIMs / 214 GB.
   Current filenames: `curl -sL https://download.kiwix.org/zim/<dir>/ | grep -o '[a-z0-9_.-]*<name>[a-z0-9_.-]*\.zim'`.
 
+### 6b. Map regions by country ("Manage Map Regions" modal) — size estimate times out
+2026-09-24 06:46 the user selected the North America + South America groups; the modal showed an
+estimate error, then "Still estimating size" on Download. Cause (admin.log, both attempts):
+`pmtiles extract --dry-run` against the 138 GB Protomaps planet build is killed by the admin's
+`DRY_RUN_TIMEOUT_MS = 60_000` (`admin/app/services/map_service.ts:44`, unchanged on upstream/dev
+since #780). Measured with go-pmtiles 1.31.2 from the daily driver, maxzoom 15: CONUS 26 s,
+Canada 64 s, North America 64 s, North+South America 109 s (44 GB result); at maxzoom 12 → 2 s.
+`CountryPickerModal.startDownload()` refuses without a finished preflight, but
+`POST /api/maps/extract {countries, maxzoom}` does not need one. Queued `north-america` (38
+countries, includes US → duplicates the state files, harmless) and `south-america` (13) at z15 via
+the API 2026-09-24 07:0x → `north-america_20260924_z15.pmtiles`, `south-america_20260924_z15.pmtiles`.
+Possible upstream PR (pending the user's go): `DRY_RUN_TIMEOUT_MS = 5 * 60_000`, matching
+`WORLD_BASEMAP_EXTRACT_TIMEOUT_MS` in the same file; no client (axios) or server timeout is shorter.
+Queue view from the host: `curl -s localhost:8080/api/downloads/jobs | jq …` (see README if added).
+
 ### 7. Later
 - Re-run `save-images.sh` after any app install/update. Re-run `build-pkgcache.sh` occasionally.
 - Optional iGPU GTT tuning for larger models (unverified): `ttm.pages_limit` / `ttm.page_pool_size`
