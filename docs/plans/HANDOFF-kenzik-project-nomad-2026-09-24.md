@@ -61,7 +61,26 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   Why this one: on a bandwidth-bound iGPU a 3B-active MoE generates 2–3× faster than a dense
   9–12B while carrying 36B of knowledge; NOMAD's RAG tier keys on the reported 36B, so it gets the
   full 5 chunks uncapped; `gpt-oss:20b` was the runner-up (smaller, but stricter refusals on
-  medical/survival topics and weaker recall).
+  medical/survival topics and weaker recall). Measured while the KB indexer (below) had the GPU
+  at 90 %; idle numbers will be higher.
+- **Knowledge Base (RAG) indexing** (2026-09-24 08:45): NOMAD embeds every ZIM into Qdrant
+  (`nomad_knowledge_base`, `storage/qdrant`) with `nomic-embed-text` — ~1,450 chunks/min on the
+  890M, two workers, `llama-server` at ~4.7 cores; this is what "cranks" on the box. It had been
+  running since the ZIMs landed on 09-23: 31 ZIMs (27.8 GB) → 83 k vectors, 487 MB. The queue
+  still held `wikipedia_en_all_maxi` (124 GB → weeks of GPU and ~100 GB+ of vectors, more than
+  RAM) and the two multilingual TED ZIMs (24 GB). Done via the admin API (all on localhost):
+  `rag.defaultIngestPolicy` → `Manual` (no auto-queue of future ZIMs), `DELETE /api/rag/jobs`
+  (42 jobs, no files deleted), then `POST /api/rag/files/embed {source, force}` for 24 ZIMs +
+  the 12 NOMAD docs `.md` (their earlier failures predate the AI Assistant install), medical
+  first. Deliberately NOT queued: `wikipedia_en_all_maxi`, `ted_mul_ted-conference`,
+  `ted_mul_ted-ed`, `wikibooks_en_all_nopic` (same text as the queued `_maxi`), and the two
+  `canadian-prepper_en_*_2026-08` entries (the KB tracks the new filenames, which do not exist
+  on disk while open item 3's rename is in place; queue them after the rename-back). The two
+  jobs that were mid-flight (`gutenberg_en_lcc-u` 81 %, `medlineplus` 2 %) were re-queued with
+  `force:true` because chunk ids are random UUIDs — a plain re-queue would have duplicated the
+  already-embedded part. With policy Manual, new ZIMs need `POST /api/rag/files/embed` (or the
+  Knowledge Base UI) to be indexed; `GET /api/rag/active-jobs`, `/api/rag/files`
+  (`state`/`chunksEmbedded` per file) and `/api/rag/failed-jobs` show progress.
 
 ## Open items
 1. DONE 2026-09-24 07:29 on the rescue OS: `save-images.sh` → generation `20260924T112953Z`, 16
