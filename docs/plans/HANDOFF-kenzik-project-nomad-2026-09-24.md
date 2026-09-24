@@ -3,6 +3,22 @@
 Supersedes `HANDOFF-kenzik-project-nomad-2026-09-23.md` (kept for the history of how each item was
 found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install/cachyos/README.md`.
 
+## Start here (new session)
+1. Read this file; the 09-23 handoff only when a "why" is needed. Memory has the standing rules
+   (ask before content installs; upstream PRs only on explicit go, fix-only, from `upstream/dev`).
+2. Which OS is up: `ssh -o BatchMode=yes nomad hostname` (primary) or `… nomad-rescue hostname`.
+   Quick health from the daily driver: `curl -4 -s http://10.0.10.186:8080/api/health`,
+   `ssh nomad 'systemctl is-active project-nomad nomad-ollama; nomad-downloads; df -h /mnt/nomad'`.
+3. State of both hosts as of 2026-09-24 07:40: primary on 6.18.52-lts, rescue on 6.18.50-lts, both
+   with toolkit `495fd39` installed and the drive copy current; image archive `20260924T112953Z`
+   (16 images) loaded on both; pkgcache 199 files. The X1 Pro checkout `~/project-nomad` is at
+   `495fd39` (docs-only behind `origin/cachyos-portable`; `git pull` there is optional).
+4. Nothing is running or half-done. The only live loose ends are open items 3 and 5 below, and the
+   Kolibri password (open item 9).
+5. The session scratchpad had `dlstatus.py` (queue viewer, superseded by `nomad-downloads`) and a
+   Kolibri session cookie jar; both are gone with the session. Nothing persistent lives outside the
+   repo, the two hosts and the datastore.
+
 ## Working arrangement (unchanged)
 - Claude Code on the daily driver, repo `~/src/project-nomad`, branch `cachyos-portable` on the fork
   `kenzik/project-nomad` (no PR; long-lived). `upstream` remote = `Crosstalk-Solutions/project-nomad`.
@@ -21,7 +37,7 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
 - Section-5 verification complete: exposure toggle (DOCKER-USER rule works under iptables-nft; note
   the IPv6 userland-proxy bypass is moot without global IPv6), clean stop + `e2fsck -fn` clean,
   offline start on the primary (after the NM fix), rescue OS boots with the drop-in and adopts apps.
-- Content on the datastore (512 GB used of 3.4 TB): Wikipedia `all-maxi` (124 GB), all six Kiwix
+- Content on the datastore (521 GB used of 3.4 TB): Wikipedia `all-maxi` (124 GB), all six Kiwix
   categories at `*-comprehensive` (62 ZIMs, 214 GB total), FDA drug reference (262,880 labels),
   nine US map collections + `north-america_20260924_z15.pmtiles` (35 GB) +
   `south-america_20260924_z15.pmtiles` (8.5 GB), Kolibri: all 43 English public Studio channels
@@ -56,6 +72,27 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
    `BOOT_ORDER` back (both OSes).
 7. Optional: GTT tuning for larger models (`ttm.pages_limit`/`ttm.page_pool_size`), unverified.
 8. Decide whether `cachyos-portable` ever becomes a PR; NOMAD does not support non-Debian hosts.
+9. Kolibri superuser `dkenzik` still has the temporary password used for the API imports; change it
+   in Kolibri (user menu → Profile). The imports do not depend on it.
+10. `nomad-expose local` only covers IPv4: Docker's userland proxy also listens on `[::]:<port>` and
+    connects to the containers from the host, bypassing DOCKER-USER. Moot on this LAN (no global
+    IPv6 on the X1 Pro), but if that changes, add an `ip6tables` rule or set `"userland-proxy": false`
+    / `"ipv6": false` in `/etc/docker/daemon.json` and re-test from a v6 client.
+
+## Candidate next work (none started; pick with the user)
+- Suspend/resume on the primary: same NetworkManager path as `networking off`; the drop-in should
+  make it a non-event — verify `ip -4 addr show br-nomad` and `:8080` after a resume.
+- Backups of the state that is not re-downloadable: `mysql/` (NOMAD DB), `storage/kolibri-gen2/`
+  (facility + user data), Vaultwarden data, Jellyfin config. Everything else on the datastore is
+  re-fetchable. No backup exists today; the drive is the single copy.
+- Jellyfin/Vaultwarden/MeshCore first-run setup happened in the UI on the primary (not tracked
+  here); check they behave on the rescue OS (they adopted and run, but no one has logged in there).
+- Model choice for the AI Assistant: only `qwen3:0.6b` has been pulled (test model); pull whatever
+  the user wants via Settings → Models (lands in `/mnt/nomad/ollama/models`, 32 GiB VRAM budget on
+  the 890M, `default_num_ctx=32768`). Optional GTT tuning (item 7) if a larger model is wanted.
+- `build-backup-os.sh --refresh` after any desktop-config change on the primary, and `pacman -Syu`
+  inside the rescue OS occasionally.
+- Upstream: watch PR #1364; the `DRY_RUN_TIMEOUT_MS` PR only if the user says go (item 5).
 
 ## Commands worth remembering
 - Queue: `nomad-downloads` (`retry|cancel|rm <jobId>`); admin API is unauthenticated on localhost.
