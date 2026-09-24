@@ -152,9 +152,9 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   `22/tcp` allowed from anywhere, so SSH over `tailscale0` passes; `:8080` and the app ports are
   Docker-published (bypass ufw) and reachable over Tailscale in `nomad-expose lan`, blocked in
   `local` (DOCKER-USER rule keys on `! -i br-nomad`); Ollama 11434 stays br-nomad-only. Tailscale
-  is `extra/tailscale` (1.102.4 today); it is NOT in `build-pkgcache.sh`'s list nor in
-  `build-backup-os.sh`'s pacstrap set — add both (and an opt-in in `bootstrap-host.sh`) if the
-  rescue OS should carry it too; each OS is its own tailnet node.
+  is `extra/tailscale` (1.102.4 today). User decision: **primary OS only**, installed by hand
+  (`pacman -S tailscale`, `tailscaled`); the rescue OS is contingency mode and does not get it, so
+  no toolkit, pkgcache or pacstrap changes.
 
 ## Commands worth remembering
 - Queue: `nomad-downloads` (`retry|cancel|rm <jobId>`); admin API is unauthenticated on localhost.
