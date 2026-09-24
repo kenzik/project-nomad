@@ -26,7 +26,7 @@ mountpoint -q "$NOMAD_MNT" && systemctl stop mnt-nomad.mount
 
 rm -f /etc/systemd/system/{project-nomad,nomad-ollama,nomad-expose-local}.service \
       /etc/udev/rules.d/99-nomad-autostart.rules /etc/sysusers.d/ollama.conf \
-      /usr/local/bin/{nomad-up,nomad-down,nomad-expose,nomad-downloads} "$NOMAD_HOST_CONF" \
+      /usr/local/bin/{nomad-up,nomad-down,nomad-expose,nomad-downloads,nomad-kb} "$NOMAD_HOST_CONF" \
       /etc/NetworkManager/conf.d/50-nomad-unmanaged.conf
 rm -rf /usr/local/lib/nomad "$NOMAD_HOST_STATE"
 [[ -L /opt/project-nomad ]] && rm -f /opt/project-nomad

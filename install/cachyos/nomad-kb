@@ -1,0 +1,58 @@
+#!/bin/bash
+# Show or act on NOMAD's Knowledge Base (RAG) ingest queue from the host.
+#   nomad-kb                       status: embed jobs, per-state file counts, vector count
+#   nomad-kb files [state]         every tracked file with its state; filter: indexed|pending|failed
+#   nomad-kb failed                failed jobs with their reasons
+#   nomad-kb queue <file> [-f]     queue one tracked file (name as shown by `files`); -f re-embeds
+#   nomad-kb sync                  rescan the ZIM library and uploads for new files
+#   nomad-kb cancel-all            drop every queued and active embed job (library files are kept)
+# The admin API has no authentication; this talks to it on localhost only.
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+: "${NOMAD_QDRANT_URL:=http://localhost:6333}"
+
+api=$NOMAD_ADMIN_URL/api/rag
+get() { curl -fsS --max-time 20 "$api/$1" || die "Admin not reachable at $NOMAD_ADMIN_URL (is NOMAD up?)"; }
+cmd=${1:-status}
+case $cmd in
+  status|files|failed) ;;
+  queue)
+    [[ -n ${2:-} ]] || die "Usage: nomad-kb queue <file> [-f]"
+    force=false; [[ ${3:-} == -f ]] && force=true
+    if [[ $2 == /* ]]; then source=$2
+    else source=$(get files | jq -r --arg n "$2" '.files[] | select(.fileName == $n) | .source' | head -n1)
+    fi
+    [[ -n $source ]] || die "Not a tracked file: $2 (see: nomad-kb files)"
+    jq -n --arg s "$source" --argjson f "$force" '{source: $s, force: $f}' |
+      curl -fsS -X POST -H 'Content-Type: application/json' -d @- "$api/files/embed"; echo; exit ;;
+  sync) curl -fsS -X POST "$api/sync"; echo; exit ;;
+  cancel-all) curl -fsS -X DELETE "$api/jobs"; echo; exit ;;
+  *) die "Usage: nomad-kb [files [state]|failed|queue <file> [-f]|sync|cancel-all]" ;;
+esac
+
+if [[ $cmd == files ]]; then
+  get files | jq -r --arg want "${2:-}" '
+    def gb: (. // 0) / 1e9 | . * 10 | floor / 10;
+    .files | map(.state //= "pending")
+    | if $want == "" then . else map(select(.state == $want)) end
+    | sort_by(.state, .fileName)
+    | .[] | [.state, (.chunksEmbedded // 0), "\(.size | gb) GB", .fileName] | @tsv' | column -t -s $'\t'
+  exit
+fi
+
+if [[ $cmd == failed ]]; then
+  get failed-jobs | jq -r 'if length == 0 then "no failed jobs" else
+    .[] | [.fileName, (.error // "?"), .jobId] | @tsv end' | column -t -s $'\t'
+  exit
+fi
+
+jobs=$(get active-jobs)
+files=$(get files)
+vectors=$(curl -fsS --max-time 5 "$NOMAD_QDRANT_URL/collections/nomad_knowledge_base" 2>/dev/null |
+  jq -r '.result.points_count // "n/a"') || vectors=n/a
+jq -rn --argjson jobs "$jobs" --argjson files "$files" --arg vectors "$vectors" '
+  def counts: group_by(.) | map("\(.[0]) \(length)") | join("  ");
+  "jobs: \(if ($jobs | length) == 0 then "none" else ($jobs | map(.status) | counts) end)"
+    + "   files: \($files.files | map(.state // "pending") | counts)   vectors: \($vectors)"'
+jq -r 'sort_by({processing: 0, active: 0, waiting: 1, delayed: 2, failed: 3}[.status] // 9, .fileName)
+  | .[] | [.status, "\(.progress // 0)%", .fileName] | @tsv' <<<"$jobs" | column -t -s $'\t'

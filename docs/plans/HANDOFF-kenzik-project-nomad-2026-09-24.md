@@ -146,6 +146,13 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
 
 ## Commands worth remembering
 - Queue: `nomad-downloads` (`retry|cancel|rm <jobId>`); admin API is unauthenticated on localhost.
+- Knowledge Base: `nomad-kb` (status), `nomad-kb files [indexed|pending|failed]`, `nomad-kb failed`,
+  `nomad-kb queue <file> [-f]`, `nomad-kb sync`, `nomad-kb cancel-all`. Added to the toolkit
+  2026-09-24 after `495fd39`; **not yet installed on either OS** — `git pull` on the X1 Pro, then
+  `sudo bash install/cachyos/bootstrap-host.sh` with the flags from `/etc/nomad-host.conf`
+  (primary: `--autostart --expose=lan --gpu=vulkan --yes`), which also refreshes the drive copy;
+  the rescue OS from its own checkout or the drive copy. Until then run it as
+  `ssh nomad bash -s status < install/cachyos/nomad-kb` from the daily driver.
 - Kiwix: `curl -s localhost:8080/api/zim/curated-categories | jq '.[] | {slug, installedTierSlug}'`.
 - Kolibri tasks (needs a session): login `POST /api/auth/session/` `{username,password,facility}`,
   then `X-CSRFToken` from the `kolibri_csrftoken` cookie; imports are

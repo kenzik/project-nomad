@@ -17,6 +17,7 @@ NOMAD_LIB=/usr/local/lib/nomad
 NOMAD_BRIDGE=br-nomad
 NOMAD_PROJECT=project-nomad
 NOMAD_ADMIN_URL=http://localhost:8080
+NOMAD_QDRANT_URL=http://localhost:6333
 NOMAD_DATA_PARTLABEL=NOMAD_DATA
 OLLAMA_ID=614
 

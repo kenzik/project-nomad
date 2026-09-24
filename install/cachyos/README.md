@@ -124,6 +124,7 @@ up with all content. Update it occasionally from inside (`sudo pacman -Syu`).
 | `sudo nomad-down [--unmount\|--eject]` | Clean stop; `--eject` powers off a USB enclosure |
 | `sudo nomad-expose lan\|local` / `nomad-expose status` | Switch exposure |
 | `nomad-downloads [retry\|cancel\|rm <jobId>]` | Download queue (ZIMs, maps, models); no root needed |
+| `nomad-kb [files [state]\|failed\|queue <file> [-f]\|sync\|cancel-all]` | Knowledge Base (RAG) ingest: jobs, per-file state, vector count; no root needed |
 | `systemctl status project-nomad nomad-ollama` | State |
 
 Do not use `docker compose down` on the NOMAD project: app containers created by the admin share its
