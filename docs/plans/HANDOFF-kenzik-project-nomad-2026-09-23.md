@@ -279,6 +279,27 @@ list with ids/sizes: scratchpad `kolibri-en-channels.json` (regenerate from
 After everything lands: re-run `save-images.sh` is NOT needed (content only), but check
 `installed-services.txt` unchanged and `df -h /mnt/nomad`.
 
+Result 2026-09-24 05:4x: Wikipedia `all-maxi` installed (`wikipedia_en_all_maxi_2026-02.zim`), all
+nine map collections 50/50 files (16 GB), Kolibri: all 43 channels imported (250 GB; two imports
+skipped 2343 + 709 files that 404 on Studio itself — upstream, not local). ~460 GB on the datastore.
+Two problems met on the Kiwix side, both handled through the API:
+- `download.kiwix.org` → `lb.download.kiwix.org` → `mirror.download.kiwix.org` throttled the 18 GB
+  TED Conference ZIM to ~50–90 KB/s (same from the daily driver). Cancelled the job
+  (`POST /api/downloads/jobs/:id/cancel`, deletes the partial) and re-queued it with
+  `POST /api/zim/download-remote {url, metadata:{title}}` from
+  `https://laotzu.ftp.acc.umu.se/mirror/kiwix.org/zim/…` (≈95 MB/s; `ftp.fau.de/kiwix/zim` ≈ 9 MB/s).
+  `InstalledResource` bookkeeping keys on the filename-derived resource id, so a same-filename
+  download from another mirror is recorded like the manifest's.
+- Three manifest URLs are dead upstream (Kiwix renamed/rotated them): `canadian_prepper_bugoutconcepts_en_2026-02`,
+  `canadian_prepper_winterprepping_en_2026-02` (now `canadian-prepper_en_<topic>_2026-08.zim`) and
+  `librepathology_en_all_maxi_2025-09` (now `2026-09`). `POST /api/manifests/refresh` did not change
+  `zim_categories`. Downloaded the current files via `download-remote` from the umu.se mirror and
+  removed the failed jobs (`DELETE /api/downloads/jobs/:id`). Because the new filenames parse to
+  different resource ids, the Survival tier will keep showing 2 resources "not installed" and
+  Medicine 1 — cosmetic; a future manifest update will fix or re-download them. Worth an upstream
+  issue on `collections/kiwix-categories.json`.
+  Current filenames: `curl -sL https://download.kiwix.org/zim/<dir>/ | grep -o '[a-z0-9_.-]*<name>[a-z0-9_.-]*\.zim'`.
+
 ### 7. Later
 - Re-run `save-images.sh` after any app install/update. Re-run `build-pkgcache.sh` occasionally.
 - Optional iGPU GTT tuning for larger models (unverified): `ttm.pages_limit` / `ttm.page_pool_size`
