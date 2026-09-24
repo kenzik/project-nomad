@@ -13,6 +13,8 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
    with toolkit `495fd39` installed and the drive copy current; image archive `20260924T112953Z`
    (16 images) loaded on both; pkgcache 199 files. The X1 Pro checkout `~/project-nomad` is at
    `495fd39` (docs-only behind `origin/cachyos-portable`; `git pull` there is optional).
+   2026-09-24 08:00: the primary has loaded the new image archive (`images.generation` now
+   `20260924T112953Z`, item 1 fully closed) and `qwen3.5:35b-a3b` is pulled (see "AI model").
 4. Nothing is running or half-done. The only live loose ends are open items 3 and 5 below, and the
    Kolibri password (open item 9).
 5. The session scratchpad had `dlstatus.py` (queue viewer, superseded by `nomad-downloads`) and a
@@ -46,6 +48,20 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
 - Apps installed by the user in the Supply Depot besides kiwix/kolibri/qdrant: cyberchef,
   excalidraw, it_tools, jellyfin, meshcore_web, stirling_pdf, vaultwarden. `installed-services.txt`
   lists all ten; the rescue OS adopted the seven new ones on 2026-09-24 07:25 (online pull).
+- **AI model** (2026-09-24 07:57): `qwen3.5:35b-a3b` (Q4_K_M, 23 GB, MoE 36B/3B-active, 256K
+  context, capabilities completion/vision/tools/thinking) pulled by the user into
+  `/mnt/nomad/ollama/models`, so both OSes see it. On the primary (Vulkan, RADV): 42/42 layers on
+  the GPU, 21.2 GiB model buffer, KV only 640 MiB at the 32768 default context (hybrid attention),
+  ≈10 GiB headroom of the 32.2 GiB budget; NOMAD's RAG bump to `num_ctx` 65536 still fits, so open
+  item 7 (GTT tuning) is unnecessary for this model. Measured via the API with `think:false`:
+  prompt eval 341 tok/s on a 3.2K-token prompt, generation 17 tok/s (11 tok/s on a first short
+  call). iGPU was at full clocks (sclk 2885 MHz, mclk 2800 MHz, 99 % busy) during the test. The
+  chat picker selects the model per session (no server-side default); `qwen3:0.6b` and
+  `nomic-embed-text:v1.5` (NOMAD's RAG embedding model, auto-pulled) are the other two models.
+  Why this one: on a bandwidth-bound iGPU a 3B-active MoE generates 2–3× faster than a dense
+  9–12B while carrying 36B of knowledge; NOMAD's RAG tier keys on the reported 36B, so it gets the
+  full 5 chunks uncapped; `gpt-oss:20b` was the runner-up (smaller, but stricter refusals on
+  medical/survival topics and weaker recall).
 
 ## Open items
 1. DONE 2026-09-24 07:29 on the rescue OS: `save-images.sh` → generation `20260924T112953Z`, 16
@@ -71,6 +87,7 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
 6. Kernel 7.2.x: when a newer 7.2.x lands, test logout → greeter on it before switching
    `BOOT_ORDER` back (both OSes).
 7. Optional: GTT tuning for larger models (`ttm.pages_limit`/`ttm.page_pool_size`), unverified.
+   Not needed for `qwen3.5:35b-a3b` (10 GiB headroom); only if a >26 GiB model is wanted.
 8. Decide whether `cachyos-portable` ever becomes a PR; NOMAD does not support non-Debian hosts.
 9. Kolibri superuser `dkenzik` still has the temporary password used for the API imports; change it
    in Kolibri (user menu → Profile). The imports do not depend on it.
@@ -87,9 +104,19 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   re-fetchable. No backup exists today; the drive is the single copy.
 - Jellyfin/Vaultwarden/MeshCore first-run setup happened in the UI on the primary (not tracked
   here); check they behave on the rescue OS (they adopted and run, but no one has logged in there).
-- Model choice for the AI Assistant: only `qwen3:0.6b` has been pulled (test model); pull whatever
-  the user wants via Settings → Models (lands in `/mnt/nomad/ollama/models`, 32 GiB VRAM budget on
-  the 890M, `default_num_ctx=32768`). Optional GTT tuning (item 7) if a larger model is wanted.
+- AI model follow-ups (model itself done, see "AI model" above):
+  - Vulkan vs ROCm throughput: the rescue OS runs Ollama on ROCm (gfx1150) against the same model
+    files; boot it once and run the benchmark one-liner below for a direct comparison. If ROCm is
+    clearly faster, add `rocm` to `GPU=` in `/etc/nomad-host.conf` on the primary and re-run the
+    bootstrap (`ollama-rocm` package). Also `powersave` EPP governor on the primary is untested vs
+    `performance` for the CPU-side share (small for this model).
+  - Upstream fix-only PR candidate (only on explicit go): `rewriteQueryWithContext`,
+    `generateChatSuggestions`-style helper calls pass neither `think` nor `thinkingCapable` to
+    `ollamaService.chat()`, so a thinking-capable model reasons at length during the query rewrite
+    on every follow-up turn (`admin/app/controllers/ollama_controller.ts:480`,
+    `admin/app/services/ollama_service.ts:338`). Fix: pass `think:false, thinkingCapable:true`
+    (→ `reasoning_effort:'none'`) for those helper calls.
+  - `qwen3:0.6b` can be deleted (Settings → Models) — no role once the real model is in.
 - `build-backup-os.sh --refresh` after any desktop-config change on the primary, and `pacman -Syu`
   inside the rescue OS occasionally.
 - Upstream: watch PR #1364; the `DRY_RUN_TIMEOUT_MS` PR only if the user says go (item 5).
@@ -104,3 +131,6 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   (~95 MB/s seen), `https://ftp.fau.de/kiwix/zim/…`; download with
   `POST /api/zim/download-remote {url, metadata:{title}}` — bookkeeping keys on the filename.
 - MySQL one-off: `sudo docker exec -i nomad_mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" nomad' <<EOF … EOF`.
+- Ollama benchmark (non-root, on the X1 Pro): build a ~3K-token prompt and read the rates —
+  `P="$(yes 'The quick brown fox jumps over the lazy dog near the river bank at dawn.' | head -160 | tr '\n' ' ') Summarize in one sentence."; jq -n --arg p "$P" '{model:"qwen3.5:35b-a3b",prompt:$p,stream:false,think:false,options:{num_predict:40}}' | curl -s localhost:11434/api/generate -d @- | jq '{prompt_tps:(.prompt_eval_count/(.prompt_eval_duration/1e9)|floor), gen_tps:(.eval_count/(.eval_duration/1e9))}'`.
+  Offload check: `sudo journalctl -u nomad-ollama -b | grep -E 'offloaded|model buffer size'`.
