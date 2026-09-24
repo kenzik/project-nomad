@@ -81,6 +81,8 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   already-embedded part. With policy Manual, new ZIMs need `POST /api/rag/files/embed` (or the
   Knowledge Base UI) to be indexed; `GET /api/rag/active-jobs`, `/api/rag/files`
   (`state`/`chunksEmbedded` per file) and `/api/rag/failed-jobs` show progress.
+  User decision 2026-09-24: the two TED ZIMs stay installed (one video + ~25 subtitle tracks per
+  talk; the Spanish text is subtitles, not separable) — do not propose removing them again.
 
 ## Open items
 1. DONE 2026-09-24 07:29 on the rescue OS: `save-images.sh` → generation `20260924T112953Z`, 16
