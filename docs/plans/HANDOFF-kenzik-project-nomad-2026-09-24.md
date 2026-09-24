@@ -32,10 +32,11 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   lists all ten; the rescue OS adopted the seven new ones on 2026-09-24 07:25 (online pull).
 
 ## Open items
-1. **Offline image archive is stale**: `docker-images/GENERATION 20260923T185117Z`, 9 images; the
-   seven new apps are not in it. Run `sudo bash /mnt/nomad/host-bootstrap/toolkit/save-images.sh`
-   (either OS) → expect 16 images in `IMAGES.txt`. Re-run after every app install/update.
-2. **`build-pkgcache.sh`** should be re-run once (adds `jq` to the offline pkgcache).
+1. DONE 2026-09-24 07:29 on the rescue OS: `save-images.sh` → generation `20260924T112953Z`, 16
+   images, 3.0 GB. The primary's `/var/lib/nomad-host/images.generation` is still the 09-23 one, so
+   its next boot `docker load`s the new archive once (a minute; images already present). Re-run
+   `save-images.sh` after every app install/update.
+2. DONE 2026-09-24: `build-pkgcache.sh` re-run on the rescue OS (69 packages, 6.9 GB, includes `jq`).
 3. **Kiwix manifest workaround in place** (details in the 09-23 handoff §6): two files renamed on
    disk to the manifest's old ids (`canadian_prepper_{bugoutconcepts,winterprepping}_en_2026-08.zim`).
    When upstream PR https://github.com/Crosstalk-Solutions/project-nomad/pull/1364 is merged and
