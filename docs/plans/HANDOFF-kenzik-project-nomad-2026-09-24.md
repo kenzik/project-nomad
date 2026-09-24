@@ -110,12 +110,14 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
     clearly faster, add `rocm` to `GPU=` in `/etc/nomad-host.conf` on the primary and re-run the
     bootstrap (`ollama-rocm` package). Also `powersave` EPP governor on the primary is untested vs
     `performance` for the CPU-side share (small for this model).
-  - Upstream fix-only PR candidate (only on explicit go): `rewriteQueryWithContext`,
-    `generateChatSuggestions`-style helper calls pass neither `think` nor `thinkingCapable` to
-    `ollamaService.chat()`, so a thinking-capable model reasons at length during the query rewrite
-    on every follow-up turn (`admin/app/controllers/ollama_controller.ts:480`,
-    `admin/app/services/ollama_service.ts:338`). Fix: pass `think:false, thinkingCapable:true`
-    (→ `reasoning_effort:'none'`) for those helper calls.
+  - Query-rewrite/title/suggestion helper calls reasoning at length with a thinking model
+    (v1.34.1: `ollama_controller.ts:480` passes neither `think` nor `thinkingCapable`) is
+    **already fixed upstream**: `4acfef5` "fix(AI): stop <think> output leaking into titles,
+    chips, and the RAG query (#1254)", 2026-08-18, first tag `v1.35.0-rc.1`; on `dev` the helpers
+    now live in `chat_service.ts` and `rag_pipeline_service.ts` and pass `think:false` plus the
+    memoised capability. No PR needed (checked 2026-09-24). The appliance runs stock v1.34.1
+    images and picks it up with the v1.35.0 update; until then follow-up turns pause for the
+    rewrite's thinking with `qwen3.5:35b-a3b`.
   - `qwen3:0.6b` can be deleted (Settings → Models) — no role once the real model is in.
 - `build-backup-os.sh --refresh` after any desktop-config change on the primary, and `pacman -Syu`
   inside the rescue OS occasionally.
