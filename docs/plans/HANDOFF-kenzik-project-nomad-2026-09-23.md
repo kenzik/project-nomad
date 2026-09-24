@@ -304,6 +304,18 @@ Two problems met on the Kiwix side, both handled through the API:
   `fix/collections-renamed-kiwix-zims` on the fork, from `upstream/dev`, manifest only). When it is
   merged and the manifest refreshes, the ids become `canadian-prepper_en_<topic>` → rename the two
   files back to the Kiwix names (or re-download) so the tier matches again.
+  DONE 2026-09-24 06:3x: after the rename + `docker restart nomad_admin` + rescan (62 books),
+  Survival = `survival-comprehensive`.
+- Medicine showed only `medicine-essential`: upstream bug in v1.34.1. `installed_resources.resource_type`
+  is `enum('zim','map')`, so `IngestDrugDataJob`'s 'dataset' row for `openfda-drug-labels` failed with
+  "Data truncated for column 'resource_type'" (admin.log) although the 262,880 labels ingested fine.
+  Fixed upstream on `dev` by migration `1778800000001_add_dataset_to_installed_resources_type`
+  (`ALTER TABLE installed_resources MODIFY COLUMN resource_type enum('zim','map','dataset') NOT NULL`).
+  Applied the same ALTER by hand 2026-09-24 06:4x via
+  `sudo docker exec -i nomad_mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" nomad' <<EOF … EOF`
+  and inserted the row the job had tried to write (values from the log; `collection_ref=medicine`,
+  `version=2026-09-23`). Idempotent with the upstream migration when NOMAD is upgraded. Result: all
+  six categories report `<slug>-comprehensive`; queue empty; 62 ZIMs / 214 GB.
   Current filenames: `curl -sL https://download.kiwix.org/zim/<dir>/ | grep -o '[a-z0-9_.-]*<name>[a-z0-9_.-]*\.zim'`.
 
 ### 7. Later
