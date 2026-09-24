@@ -331,7 +331,9 @@ countries, includes US → duplicates the state files, harmless) and `south-amer
 the API 2026-09-24 07:0x → `north-america_20260924_z15.pmtiles`, `south-america_20260924_z15.pmtiles`.
 Possible upstream PR (pending the user's go): `DRY_RUN_TIMEOUT_MS = 5 * 60_000`, matching
 `WORLD_BASEMAP_EXTRACT_TIMEOUT_MS` in the same file; no client (axios) or server timeout is shorter.
-Queue view from the host: `curl -s localhost:8080/api/downloads/jobs | jq …` (see README if added).
+Queue view from the host: `nomad-downloads [retry|cancel|rm <jobId>]` (toolkit, needs `jq`, which
+`bootstrap-host.sh` now installs; `build-pkgcache.sh` includes it too, so re-run that before the next
+offline bootstrap). Extract jobs report no `totalBytes` until they finish (0 GB total is normal).
 
 ### 7. Later
 - Re-run `save-images.sh` after any app install/update. Re-run `build-pkgcache.sh` occasionally.

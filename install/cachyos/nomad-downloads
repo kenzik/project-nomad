@@ -1,0 +1,35 @@
+#!/bin/bash
+# Show or act on NOMAD's download queue (ZIMs, maps, models) from the host.
+#   nomad-downloads                 list jobs (empty output = queue empty)
+#   nomad-downloads retry <jobId>   re-queue a failed job
+#   nomad-downloads cancel <jobId>  abort a job and delete its partial file
+#   nomad-downloads rm <jobId>      drop a failed job from the list
+# The admin API has no authentication; this talks to it on localhost only.
+set -uo pipefail
+. /usr/local/lib/nomad/common.sh
+
+api=$NOMAD_ADMIN_URL/api/downloads/jobs
+cmd=${1:-list}
+case $cmd in
+  list) ;;
+  retry|cancel) [[ -n ${2:-} ]] || die "Usage: nomad-downloads $cmd <jobId>"
+    curl -fsS -X POST "$api/$2/$cmd"; echo; exit ;;
+  rm) [[ -n ${2:-} ]] || die "Usage: nomad-downloads rm <jobId>"
+    curl -fsS -X DELETE "$api/$2"; echo; exit ;;
+  *) die "Usage: nomad-downloads [retry|cancel|rm <jobId>]" ;;
+esac
+
+json=$(curl -fsS --max-time 20 "$api") || die "Admin not reachable at $NOMAD_ADMIN_URL (is NOMAD up?)"
+jq -r '
+  def gb: (. // 0) / 1e9 | . * 10 | floor / 10;
+  if length == 0 then "queue empty" else
+    (group_by(.status) | map("\(.[0].status): \(length)") | join("  ")),
+    (.[] | [
+      .status,
+      "\(.progress // 0)%",
+      "\(.downloadedBytes | gb)/\(.totalBytes | gb) GB",
+      .filetype,
+      (.title // (.url | split("/") | last)),
+      .jobId
+    ] | @tsv)
+  end' <<<"$json" | column -t -s $'\t'

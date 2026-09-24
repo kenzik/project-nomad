@@ -22,7 +22,7 @@ cache=$NOMAD_PKGCACHE/generic
 # pacman downloads as the unprivileged 'alpm' user on hosts with DownloadUser set.
 install -d -m755 "$NOMAD_PKGCACHE" "$cache"
 
-pkgs=(docker docker-compose ollama zstd curl archlinux-keyring cachyos-keyring)
+pkgs=(docker docker-compose ollama zstd curl jq archlinux-keyring cachyos-keyring)
 IFS=, read -ra gpus <<<"$gpu"
 for g in "${gpus[@]}"; do
   case $g in

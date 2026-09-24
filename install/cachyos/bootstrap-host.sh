@@ -122,7 +122,7 @@ setup_docker_subvols() {
 }
 
 install_packages() {
-  local pkgs=(docker docker-compose ollama zstd curl) g
+  local pkgs=(docker docker-compose ollama zstd curl jq) g
   IFS=, read -ra gpus <<<"$gpu"
   for g in "${gpus[@]}"; do
     case $g in
@@ -155,7 +155,7 @@ install_files() {
   install -d /usr/local/lib/nomad "$NOMAD_HOST_STATE"
   install -m644 "$here/lib/common.sh" /usr/local/lib/nomad/
   install -m755 "$here"/lib/nomad-* /usr/local/lib/nomad/
-  install -m755 "$here/nomad-up" "$here/nomad-down" "$here/nomad-expose" /usr/local/bin/
+  install -m755 "$here/nomad-up" "$here/nomad-down" "$here/nomad-expose" "$here/nomad-downloads" /usr/local/bin/
   install -m644 "$here"/units/*.service /etc/systemd/system/
 
   local rules=/etc/udev/rules.d/99-nomad-autostart.rules
