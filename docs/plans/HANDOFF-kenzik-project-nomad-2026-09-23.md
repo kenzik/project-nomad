@@ -295,9 +295,15 @@ Two problems met on the Kiwix side, both handled through the API:
   `librepathology_en_all_maxi_2025-09` (now `2026-09`). `POST /api/manifests/refresh` did not change
   `zim_categories`. Downloaded the current files via `download-remote` from the umu.se mirror and
   removed the failed jobs (`DELETE /api/downloads/jobs/:id`). Because the new filenames parse to
-  different resource ids, the Survival tier will keep showing 2 resources "not installed" and
-  Medicine 1 — cosmetic; a future manifest update will fix or re-download them. Worth an upstream
-  issue on `collections/kiwix-categories.json`.
+  different resource ids, the Survival tier showed no installed tier and Medicine 1 missing.
+  Fix chosen 2026-09-24: (a) rename the two prepper files on disk to the manifest's ids
+  (`canadian_prepper_<topic>_en_2026-08.zim`) + `docker restart nomad_admin` (reconcile runs only
+  at admin start, `bin/server.ts`, and deletes rows whose id is not on disk — so DB edits do not
+  stick) + `POST /api/zim/rescan-library`; LibrePathology's new filename already parses to its id.
+  (b) Upstream PR https://github.com/Crosstalk-Solutions/project-nomad/pull/1364 (branch
+  `fix/collections-renamed-kiwix-zims` on the fork, from `upstream/dev`, manifest only). When it is
+  merged and the manifest refreshes, the ids become `canadian-prepper_en_<topic>` → rename the two
+  files back to the Kiwix names (or re-download) so the tier matches again.
   Current filenames: `curl -sL https://download.kiwix.org/zim/<dir>/ | grep -o '[a-z0-9_.-]*<name>[a-z0-9_.-]*\.zim'`.
 
 ### 7. Later
