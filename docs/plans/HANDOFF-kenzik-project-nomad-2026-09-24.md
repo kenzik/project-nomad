@@ -143,6 +143,18 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
 - `build-backup-os.sh --refresh` after any desktop-config change on the primary, and `pacman -Syu`
   inside the rescue OS occasionally.
 - Upstream: watch PR #1364; the `DRY_RUN_TIMEOUT_MS` PR only if the user says go (item 5).
+- Network plan (user, 2026-09-24): a GL.iNet Beryl AX in **Router mode** goes between the X1 Pro
+  and the main LAN (X1 Pro on the Beryl's 192.168.8.0/24 behind NAT); Tailscale on the X1 Pro for
+  access whenever it has internet, nothing needed off-grid. Consequences once that happens:
+  `nomad.local`/`10.0.10.186` stop working from the main LAN — use the MagicDNS name or 100.x
+  address in `~/.ssh/config` (`Host nomad`/`nomad-rescue`; host keys unchanged) and in scripts from
+  the daily driver; on the Beryl's own Wi-Fi mDNS still works. Firewall facts: ufw is active with
+  `22/tcp` allowed from anywhere, so SSH over `tailscale0` passes; `:8080` and the app ports are
+  Docker-published (bypass ufw) and reachable over Tailscale in `nomad-expose lan`, blocked in
+  `local` (DOCKER-USER rule keys on `! -i br-nomad`); Ollama 11434 stays br-nomad-only. Tailscale
+  is `extra/tailscale` (1.102.4 today); it is NOT in `build-pkgcache.sh`'s list nor in
+  `build-backup-os.sh`'s pacstrap set — add both (and an opt-in in `bootstrap-host.sh`) if the
+  rescue OS should carry it too; each OS is its own tailnet node.
 
 ## Commands worth remembering
 - Queue: `nomad-downloads` (`retry|cancel|rm <jobId>`); admin API is unauthenticated on localhost.
