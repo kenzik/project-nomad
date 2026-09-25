@@ -83,6 +83,12 @@ found and fixed). Design: `PLAN-kenzik-project-nomad-init.md`. Runbook: `install
   (`state`/`chunksEmbedded` per file) and `/api/rag/failed-jobs` show progress.
   User decision 2026-09-24: the two TED ZIMs stay installed (one video + ~25 subtitle tracks per
   talk; the Spanish text is subtitles, not separable) — do not propose removing them again.
+  Footprint check 2026-09-25 13:10 at 2.49 M vectors (61 files done, 6 left ≈ 13 GB of ZIM):
+  Qdrant RSS 9.5 GiB, `storage/qdrant` 13 GB, HNSW keeping up (indexed ≈ points), host RAM 9 G
+  used / 50 G available. Rule of thumb from this run: ~3.8 GiB RSS and ~5 GB disk per million
+  vectors — Wikipedia all-maxi would be several × this box's RAM, which confirms excluding it.
+  Display quirk: a large ZIM's batch continuation re-enters the queue as `waiting 0%`; the
+  file's chunks are kept (`nomad-kb files` shows the running count).
 
 ## Open items
 1. DONE 2026-09-24 07:29 on the rescue OS: `save-images.sh` → generation `20260924T112953Z`, 16
