@@ -13,6 +13,14 @@ set -uo pipefail
 
 api=$NOMAD_ADMIN_URL/api/rag
 get() { curl -fsS --max-time 20 "$api/$1" || die "Admin not reachable at $NOMAD_ADMIN_URL (is NOMAD up?)"; }
+# Vectors stored so far for one source path. The admin only records a file's chunk count once the
+# whole file is done, so this is the only live per-file progress; "?" when Qdrant is unreachable.
+vectors_for() {
+  jq -nc --arg s "$1" '{exact: true, filter: {must: [{key: "source", match: {value: $s}}]}}' |
+    curl -fsS --max-time 10 -X POST -H 'Content-Type: application/json' -d @- \
+      "$NOMAD_QDRANT_URL/collections/nomad_knowledge_base/points/count" 2>/dev/null |
+    jq -r '.result.count // "?"' || echo '?'
+}
 cmd=${1:-status}
 case $cmd in
   status|files|failed) ;;
@@ -36,7 +44,10 @@ if [[ $cmd == files ]]; then
     .files | map(.state //= "pending")
     | if $want == "" then . else map(select(.state == $want)) end
     | sort_by(.state, .fileName)
-    | .[] | [.state, (.chunksEmbedded // 0), "\(.size | gb) GB", .fileName] | @tsv' | column -t -s $'\t'
+    | .[] | [.state, "\(.size | gb) GB", .fileName, .source] | @tsv' |
+  while IFS=$'\t' read -r state size name source; do
+    printf '%s\t%s\t%s\t%s\n' "$state" "$(vectors_for "$source")" "$size" "$name"
+  done | column -t -s $'\t'
   exit
 fi
 
@@ -54,5 +65,11 @@ jq -rn --argjson jobs "$jobs" --argjson files "$files" --arg vectors "$vectors" 
   def counts: group_by(.) | map("\(.[0]) \(length)") | join("  ");
   "jobs: \(if ($jobs | length) == 0 then "none" else ($jobs | map(.status) | counts) end)"
     + "   files: \($files.files | map(.state // "pending") | counts)   vectors: \($vectors)"'
+# A large ZIM is embedded in batches of 50 articles; each batch is its own job and the next one
+# is queued at the back, so a file cycles between "processing NN%" and "waiting 0%" (a waiting
+# continuation has no progress yet). The vectors column is the real per-file progress.
 jq -r 'sort_by({processing: 0, active: 0, waiting: 1, delayed: 2, failed: 3}[.status] // 9, .fileName)
-  | .[] | [.status, "\(.progress // 0)%", .fileName] | @tsv' <<<"$jobs" | column -t -s $'\t'
+  | .[] | [.status, "\(.progress // 0)%", .fileName, .filePath] | @tsv' <<<"$jobs" |
+while IFS=$'\t' read -r status progress name path; do
+  printf '%s\t%s\t%s vectors\t%s\n' "$status" "$progress" "$(vectors_for "$path")" "$name"
+done | column -t -s $'\t'
