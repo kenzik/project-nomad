@@ -1,0 +1,7 @@
+# RAK4631 (MeshCore companion firmware) on the host's USB. NOMAD's MeshCore Web card talks to the
+# radio through Chromium's Web Serial, which opens /dev/ttyACM* as the desktop user. `uaccess` makes
+# systemd-logind put an ACL for the active seat user on the node, so no group membership (uucp) or
+# fresh login is needed. Must sort before 73-seat-late.rules, which applies the tag.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="239a", ATTRS{idProduct}=="8029", TAG+="uaccess"
+# The board's UF2 bootloader (double-tap reset) exposes a CDC port too.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="239a", ATTRS{idProduct}=="0029", TAG+="uaccess"

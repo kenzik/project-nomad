@@ -165,6 +165,8 @@ install_files() {
   else
     rm -f "$rules"
   fi
+  # Desktop-user access to a MeshCore radio's serial port (see the file's header).
+  install -Dm644 "$here/units/70-nomad-meshcore-serial.rules" /etc/udev/rules.d/70-nomad-meshcore-serial.rules
   live udevadm control --reload
 
   # NetworkManager must not assume Docker's bridges (see the file's header).

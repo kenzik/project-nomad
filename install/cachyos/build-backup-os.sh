@@ -116,8 +116,11 @@ if [[ $rocm == yes ]]; then pkgs+=(ollama-rocm); gpu+=,rocm; fi
 if [[ $desktop == yes ]]; then
   # The CachyOS Hyprland + Noctalia edition as the installer lays it out. The meta package brings
   # hyprland, noctalia, kitty, dolphin, portals, uwsm and base fonts; the greeter is separate.
+  # chromium: NOMAD's MeshCore Web card reaches a radio only through Web Serial / Web Bluetooth,
+  # which Firefox lacks; the RAK4631 on the host's USB is usable only from a browser on the host
+  # (the user must also be in group uucp for /dev/ttyACM*).
   pkgs+=(cachyos-hypr-noctalia noctalia-greeter cachyos-wallpapers cachyos-zsh-config
-    cachyos-fish-config cachyos-micro-settings firefox pavucontrol btop fastfetch xdg-user-dirs
+    cachyos-fish-config cachyos-micro-settings firefox chromium pavucontrol btop fastfetch xdg-user-dirs
     bluez bluez-utils upower pipewire pipewire-alsa pipewire-pulse wireplumber gst-plugin-pipewire
     noto-fonts-cjk cantarell-fonts ttf-dejavu ttf-liberation ttf-bitstream-vera ttf-opensans
     ttf-firacode-nerd ttf-meslo-nerd ttf-nerd-fonts-symbols-mono)
