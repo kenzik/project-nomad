@@ -2,6 +2,7 @@
 # Show or act on NOMAD's Knowledge Base (RAG) ingest queue from the host.
 #   nomad-kb                       status: embed jobs, per-state file counts, vector count
 #   nomad-kb files [state]         every tracked file with its state; filter: indexed|pending|failed
+#                                  ("pending" covers the admin's pending_decision state under Manual policy)
 #   nomad-kb failed                failed jobs with their reasons
 #   nomad-kb queue <file> [-f]     queue one tracked file (name as shown by `files`); -f re-embeds
 #   nomad-kb sync                  rescan the ZIM library and uploads for new files
@@ -41,7 +42,7 @@ esac
 if [[ $cmd == files ]]; then
   get files | jq -r --arg want "${2:-}" '
     def gb: (. // 0) / 1e9 | . * 10 | floor / 10;
-    .files | map(.state //= "pending")
+    .files | map(.state = (if .state == null or .state == "pending_decision" then "pending" else .state end))
     | if $want == "" then . else map(select(.state == $want)) end
     | sort_by(.state, .fileName)
     | .[] | [.state, "\(.size | gb) GB", .fileName, .source] | @tsv' |
@@ -64,7 +65,7 @@ vectors=$(curl -fsS --max-time 5 "$NOMAD_QDRANT_URL/collections/nomad_knowledge_
 jq -rn --argjson jobs "$jobs" --argjson files "$files" --arg vectors "$vectors" '
   def counts: group_by(.) | map("\(.[0]) \(length)") | join("  ");
   "jobs: \(if ($jobs | length) == 0 then "none" else ($jobs | map(.status) | counts) end)"
-    + "   files: \($files.files | map(.state // "pending") | counts)   vectors: \($vectors)"'
+    + "   files: \($files.files | map(if .state == null or .state == "pending_decision" then "pending" else .state end) | counts)   vectors: \($vectors)"'
 # A large ZIM is embedded in batches of 50 articles; each batch is its own job and the next one
 # is queued at the back, so a file cycles between "processing NN%" and "waiting 0%" (a waiting
 # continuation has no progress yet). The vectors column is the real per-file progress.
